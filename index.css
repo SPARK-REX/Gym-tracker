@@ -21,6 +21,11 @@
     box-sizing: border-box;
 }
 
+html {
+    background-color: var(--bg-dark);
+    min-height: 100%;
+}
+
 body {
     font-family: var(--font-main);
     background-color: var(--bg-dark);
