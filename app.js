@@ -91,8 +91,112 @@ const DOM = {
     nameInput: document.getElementById('exercise-name-input'),
     setsInput: document.getElementById('exercise-sets-input'),
     repsInput: document.getElementById('exercise-reps-input'),
-    editingIdInput: document.getElementById('editing-exercise-id')
+    editingIdInput: document.getElementById('editing-exercise-id'),
+
+    // Sync
+    appTitle: document.getElementById('app-title'),
+    syncModal: document.getElementById('sync-modal'),
+    closeSyncBtn: document.getElementById('close-sync-btn'),
+    googleLoginBtn: document.getElementById('google-login-btn'),
+    googleLogoutBtn: document.getElementById('google-logout-btn'),
+    syncStatus: document.getElementById('sync-status')
 };
+
+// --- Firebase Setup ---
+const firebaseConfig = {
+    apiKey: "AIzaSyD2f6oNnfNG2KzKK8PAwuR47lUMUOy17bc",
+    authDomain: "gym-tracker-fb9b3.firebaseapp.com",
+    databaseURL: "https://gym-tracker-fb9b3-default-rtdb.firebaseio.com",
+    projectId: "gym-tracker-fb9b3",
+    storageBucket: "gym-tracker-fb9b3.firebasestorage.app",
+    messagingSenderId: "1071913642522",
+    appId: "1:1071913642522:web:429d4c001c13eff84ebfa3",
+    measurementId: "G-R5ZNQBNEE3"
+};
+
+let auth, db, currentUser;
+try {
+    if (typeof firebase !== 'undefined') {
+        firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+        db = firebase.database();
+
+        auth.onAuthStateChanged(user => {
+            currentUser = user;
+            if (user) {
+                DOM.syncStatus.innerHTML = `Connected as <b>${user.displayName || user.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
+                DOM.googleLoginBtn.style.display = 'none';
+                DOM.googleLogoutBtn.style.display = 'flex';
+                loadDataFromFirebase();
+            } else {
+                DOM.syncStatus.textContent = 'Not connected. Data is saved locally.';
+                DOM.googleLoginBtn.style.display = 'flex';
+                DOM.googleLogoutBtn.style.display = 'none';
+            }
+        });
+    }
+} catch (e) {
+    console.warn("Firebase not initialized correctly. Please check config.", e);
+}
+
+let isSyncing = false;
+
+function saveDataToFirebase() {
+    if (!currentUser || !db || isSyncing) return;
+
+    db.ref('users/' + currentUser.uid + '/appState').set({
+        workouts: appState.workouts,
+        progress: appState.progress,
+        streak: appState.streak,
+        lastStreakUpdate: appState.lastStreakUpdate || null,
+        splitMode: appState.splitMode
+    }).catch(err => console.error("Firebase save error:", err));
+}
+
+function loadDataFromFirebase() {
+    if (!currentUser || !db) return;
+    isSyncing = true;
+    DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--text-muted)">Syncing...</small>`;
+
+    db.ref('users/' + currentUser.uid + '/appState').once('value').then(snapshot => {
+        const val = snapshot.val();
+        if (val) {
+            appState.workouts = val.workouts || DEFAULT_WORKOUTS;
+            appState.progress = val.progress || {};
+            appState.streak = val.streak || 0;
+            appState.lastStreakUpdate = val.lastStreakUpdate || null;
+            appState.splitMode = val.splitMode || 'ppl';
+
+            if (!SPLIT_MODES[appState.splitMode].includes(appState.activeSplit)) {
+                appState.activeSplit = SPLIT_MODES[appState.splitMode][0];
+            }
+
+            const todayStr = getTodayDateString();
+            if (!appState.progress[todayStr]) {
+                appState.progress[todayStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
+            }
+            appState.selectedDate = todayStr;
+
+            saveState(true);
+
+            renderHeader();
+            renderCalendar();
+            renderSplitTabs();
+            renderSplit(appState.activeSplit);
+            updateStreakDisplay();
+
+            DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
+        } else {
+            saveDataToFirebase();
+            DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
+        }
+        isSyncing = false;
+    }).catch(err => {
+        console.error("Firebase load error:", err);
+        DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-red)">Sync Failed</small>`;
+        isSyncing = false;
+    });
+}
 
 // --- Utilities ---
 function getTodayDateString() {
@@ -100,12 +204,16 @@ function getTodayDateString() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function saveState() {
+function saveState(skipFirebase = false) {
     localStorage.setItem('gymWorkouts', JSON.stringify(appState.workouts));
     localStorage.setItem('gymProgress', JSON.stringify(appState.progress));
     localStorage.setItem('gymStreak', appState.streak);
     localStorage.setItem('gymLastStreakUpdate', appState.lastStreakUpdate);
     localStorage.setItem('gymSplitMode', appState.splitMode);
+
+    if (!skipFirebase) {
+        saveDataToFirebase();
+    }
 }
 
 function generateId() {
@@ -435,8 +543,34 @@ function renderSplit(splitName) {
     }
 }
 
+let eventsBound = false;
 // --- Event Handlers ---
 function bindEvents() {
+    if (eventsBound) return;
+    eventsBound = true;
+
+    if (DOM.appTitle) {
+        DOM.appTitle.addEventListener('click', () => DOM.syncModal.classList.remove('hidden'));
+    }
+    if (DOM.closeSyncBtn) {
+        DOM.closeSyncBtn.addEventListener('click', () => DOM.syncModal.classList.add('hidden'));
+    }
+    if (DOM.googleLoginBtn) {
+        DOM.googleLoginBtn.addEventListener('click', () => {
+            if (!auth) return alert("Firebase not configured! Please add your config in app.js.");
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(err => {
+                console.error(err);
+                alert("Sign-in error: " + err.message);
+            });
+        });
+    }
+    if (DOM.googleLogoutBtn) {
+        DOM.googleLogoutBtn.addEventListener('click', () => {
+            if (auth) auth.signOut();
+        });
+    }
+
     DOM.splitSelector.addEventListener('click', (e) => {
         if (e.target.classList.contains('split-tab')) {
             renderSplit(e.target.dataset.split);

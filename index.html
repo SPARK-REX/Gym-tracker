@@ -15,7 +15,8 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1 class="glow-text-green">TRACKER</h1>
+            <h1 id="app-title" class="glow-text-green" title="Click to sync"
+                style="cursor: pointer; transition: text-shadow 0.3s;">TRACKER</h1>
             <div class="header-right">
                 <div class="streak-header-small">
                     <span style="font-size: 1.4rem;">🔥</span> <span id="streak-count" class="glow-text-green">0</span>
@@ -91,6 +92,38 @@
             </div>
         </div>
     </div>
+
+    <!-- Sync / Account Modal -->
+    <div id="sync-modal" class="modal hidden">
+        <div class="modal-content glass-panel" style="text-align: center;">
+            <div class="modal-header">
+                <h3>Cloud Sync</h3>
+                <button id="close-sync-btn" class="icon-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="sync-status" style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">Not
+                    connected. Data is saved locally.</p>
+                <div
+                    style="font-size: 0.8rem; color: #ffae42; margin-bottom: 15px; text-align: left; background: rgba(255,174,66,0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,174,66,0.3);">
+                    <b>Developer Note:</b> To use Firebase sync, open <code>app.js</code> and replace the
+                    <code>firebaseConfig</code> object with your actual Firebase project configuration.
+                </div>
+                <button id="google-login-btn" class="glass-btn glow-btn-green"
+                    style="justify-content: center; width: 100%;">
+                    <i class="fab fa-google"></i> Sign in with Google
+                </button>
+                <button id="google-logout-btn" class="glass-btn"
+                    style="justify-content: center; width: 100%; display: none; margin-top: 10px;">
+                    <i class="fas fa-sign-out-alt"></i> Sign Out
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-database-compat.js"></script>
 
     <script src="app.js"></script>
 </body>
