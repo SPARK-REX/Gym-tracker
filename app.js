@@ -67,7 +67,6 @@ let appState = {
 
 // --- DOM Elements ---
 const DOM = {
-    yearProgressBar: document.getElementById('year-progress-bar'),
     currentDateDisplay: document.getElementById('current-date'),
     streakCountDisplay: document.getElementById('streak-count'),
     calendarContainer: document.getElementById('calendar-container'),
@@ -147,7 +146,6 @@ function checkAndUpdateStreak() {
 // --- Initialization ---
 function init() {
     checkAndUpdateStreak();
-    updateYearProgress();
     renderHeader();
     renderCalendar();
 
@@ -164,18 +162,6 @@ function init() {
 
 // --- Render Functions ---
 
-function updateYearProgress() {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const diff = now - start;
-    const oneDay = 1000 * 60 * 60 * 24;
-    const dayOfYear = Math.floor(diff / oneDay);
-    const daysInYear = (now.getFullYear() % 4 === 0 && now.getFullYear() % 100 !== 0) || now.getFullYear() % 400 === 0 ? 366 : 365;
-
-    const percent = (dayOfYear / daysInYear) * 100;
-    DOM.yearProgressBar.style.width = `${percent}%`;
-}
-
 function renderHeader() {
     const options = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
     DOM.currentDateDisplay.textContent = new Date().toLocaleDateString('en-US', options);
@@ -189,17 +175,17 @@ function renderCalendar() {
     DOM.calendarContainer.innerHTML = '';
     const now = new Date();
 
-    // Get monday of current week
-    const currentDay = now.getDay();
-    const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - distanceToMonday);
+    const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-    const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    // Generate 14 days in the past and 14 days in the future (28 days total)
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() - 14);
 
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
+    let todayNode = null;
+
+    for (let i = 0; i < 29; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
         const isToday = dateStr === todayStr;
@@ -212,10 +198,11 @@ function renderCalendar() {
         node.dataset.date = dateStr;
 
         let innerHtml = `
-            <span class="day-label">${dayNames[i]}</span>
+            <span class="day-label">${dayNames[d.getDay()]}</span>
             <div class="day-circle">${d.getDate()}</div>
         `;
 
+        // Only show planned dot if it's strictly a future incomplete planned workout
         if (prog && prog.plannedSplit && prog.plannedSplit !== 'rest' && !isCompleted && dateStr > todayStr) {
             innerHtml += `<div class="planned-dot"></div>`;
         }
@@ -234,6 +221,23 @@ function renderCalendar() {
         });
 
         DOM.calendarContainer.appendChild(node);
+
+        if (isToday) {
+            todayNode = node;
+        }
+    }
+
+    // After adding all nodes, scroll the calendar so today is visible/centered
+    if (todayNode) {
+        // Use a short timeout to let the DOM settle before scrolling
+        setTimeout(() => {
+            const containerCenter = DOM.calendarContainer.offsetWidth / 2;
+            const nodeCenter = todayNode.offsetLeft + (todayNode.offsetWidth / 2);
+            DOM.calendarContainer.scrollTo({
+                left: nodeCenter - containerCenter,
+                behavior: 'smooth'
+            });
+        }, 10);
     }
 }
 

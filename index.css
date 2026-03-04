@@ -42,25 +42,6 @@ body {
     background-attachment: fixed;
 }
 
-/* --- Top Year Progress Bar --- */
-.year-progress-container {
-    width: 100%;
-    height: 6px;
-    background-color: rgba(255, 255, 255, 0.05);
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 1000;
-}
-
-.year-progress-bar {
-    height: 100%;
-    width: 0%;
-    /* JS will calculate */
-    background-color: var(--neon-green);
-    box-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
-    transition: width 1s ease-out;
-}
 
 /* --- Layout --- */
 .app-container {
@@ -152,8 +133,22 @@ body {
 
 .week-calendar {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
+    /* Items start from left to wrap around */
     align-items: center;
+    gap: 15px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Firefox */
+    -webkit-overflow-scrolling: touch;
+    /* Smooth iOS scrolling */
+    scroll-behavior: smooth;
+    /* Smooth programmatic native scrolling */
+}
+
+.week-calendar::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Edge */
 }
 
 .day-node {
@@ -164,6 +159,8 @@ body {
     width: 45px;
     position: relative;
     cursor: pointer;
+    flex-shrink: 0;
+    /* Prevents days from shrinking to fit */
 }
 
 .day-label {
