@@ -504,6 +504,28 @@ body {
     z-index: 2;
 }
 
+.item-yt-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: rgba(255, 0, 0, 0.15);
+    color: #ff4444;
+    text-decoration: none;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 0, 0, 0.2);
+}
+
+.item-yt-btn:hover {
+    background: rgba(255, 0, 0, 0.3);
+    color: #ff0000;
+    box-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+    transform: scale(1.1);
+}
+
 /* Custom Checkbox */
 .custom-checkbox {
     width: 26px;

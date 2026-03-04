@@ -478,6 +478,8 @@ function renderSplit(splitName) {
              </div>`;
         }
 
+        const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + ' exercise form tutorial')}`;
+
         li.innerHTML = `
             <div class="exercise-bg-animation"></div>
             <div class="exercise-info">
@@ -488,6 +490,9 @@ function renderSplit(splitName) {
                 </div>
             </div>
             <div class="exercise-actions">
+                <a href="${youtubeSearchUrl}" target="_blank" rel="noopener noreferrer" class="item-yt-btn" title="Watch Tutorial">
+                    <i class="fab fa-youtube"></i>
+                </a>
                 <button class="item-edit-btn" data-id="${ex.id}"><i class="fas fa-pen"></i></button>
                 <button class="item-delete-btn" data-id="${ex.id}"><i class="fas fa-trash"></i></button>
             </div>
