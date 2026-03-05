@@ -166,27 +166,26 @@ function loadDataFromFirebase() {
     isSyncing = true;
     DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--text-muted)">Syncing...</small>`;
 
+    // Track if user already made a sync choice this session
+    const syncChoiceKey = 'gymSyncChoiceMade_' + currentUser.uid;
+    const alreadyChosen = sessionStorage.getItem(syncChoiceKey);
+
     db.ref('users/' + currentUser.uid + '/appState').once('value').then(snapshot => {
         const val = snapshot.val();
         if (val) {
-            // Cloud data exists — check if local has meaningful progress too
-            const localHasProgress = Object.keys(appState.progress).some(key => {
-                const p = appState.progress[key];
-                return p && (p.splitCompleted || (p.exercises && p.exercises.length > 0));
-            });
-
-            if (localHasProgress) {
-                // Both local and cloud have data — ask the user what to do
+            if (alreadyChosen) {
+                // Already made a choice this session — silently load cloud data
+                applyCloudData(val);
+            } else {
+                // First login this session — show the choice modal
                 pendingCloudData = val;
                 DOM.syncModal.classList.add('hidden');
                 DOM.syncChoiceModal.classList.remove('hidden');
                 isSyncing = false;
-            } else {
-                // No meaningful local data — just load cloud data silently
-                applyCloudData(val);
             }
         } else {
             // No cloud data — upload local data
+            sessionStorage.setItem(syncChoiceKey, 'true');
             saveDataToFirebase();
             DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
             isSyncing = false;
@@ -667,6 +666,9 @@ function bindEvents() {
     }
     if (DOM.googleLogoutBtn) {
         DOM.googleLogoutBtn.addEventListener('click', () => {
+            if (currentUser) {
+                sessionStorage.removeItem('gymSyncChoiceMade_' + currentUser.uid);
+            }
             if (auth) auth.signOut();
         });
     }
@@ -675,6 +677,7 @@ function bindEvents() {
     if (DOM.syncKeepLocalBtn) {
         DOM.syncKeepLocalBtn.addEventListener('click', () => {
             // Upload current local data to cloud, overwriting cloud
+            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             pendingCloudData = null;
             DOM.syncChoiceModal.classList.add('hidden');
             saveDataToFirebase();
@@ -683,7 +686,7 @@ function bindEvents() {
     }
     if (DOM.syncLoadCloudBtn) {
         DOM.syncLoadCloudBtn.addEventListener('click', () => {
-            // Load cloud data to this device
+            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             DOM.syncChoiceModal.classList.add('hidden');
             if (pendingCloudData) {
                 applyCloudData(pendingCloudData);
@@ -693,6 +696,7 @@ function bindEvents() {
     }
     if (DOM.syncMergeBtn) {
         DOM.syncMergeBtn.addEventListener('click', () => {
+            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             DOM.syncChoiceModal.classList.add('hidden');
             if (pendingCloudData) {
                 mergeData(pendingCloudData);
