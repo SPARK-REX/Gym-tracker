@@ -99,7 +99,13 @@ const DOM = {
     closeSyncBtn: document.getElementById('close-sync-btn'),
     googleLoginBtn: document.getElementById('google-login-btn'),
     googleLogoutBtn: document.getElementById('google-logout-btn'),
-    syncStatus: document.getElementById('sync-status')
+    syncStatus: document.getElementById('sync-status'),
+
+    // Sync Choice
+    syncChoiceModal: document.getElementById('sync-choice-modal'),
+    syncKeepLocalBtn: document.getElementById('sync-keep-local-btn'),
+    syncLoadCloudBtn: document.getElementById('sync-load-cloud-btn'),
+    syncMergeBtn: document.getElementById('sync-merge-btn')
 };
 
 // --- Firebase Setup ---
@@ -153,6 +159,8 @@ function saveDataToFirebase() {
     }).catch(err => console.error("Firebase save error:", err));
 }
 
+let pendingCloudData = null;
+
 function loadDataFromFirebase() {
     if (!currentUser || !db) return;
     isSyncing = true;
@@ -161,41 +169,128 @@ function loadDataFromFirebase() {
     db.ref('users/' + currentUser.uid + '/appState').once('value').then(snapshot => {
         const val = snapshot.val();
         if (val) {
-            appState.workouts = val.workouts || DEFAULT_WORKOUTS;
-            appState.progress = val.progress || {};
-            appState.streak = val.streak || 0;
-            appState.lastStreakUpdate = val.lastStreakUpdate || null;
-            appState.splitMode = val.splitMode || 'ppl';
+            // Cloud data exists — check if local has meaningful progress too
+            const localHasProgress = Object.keys(appState.progress).some(key => {
+                const p = appState.progress[key];
+                return p && (p.splitCompleted || (p.exercises && p.exercises.length > 0));
+            });
 
-            if (!SPLIT_MODES[appState.splitMode].includes(appState.activeSplit)) {
-                appState.activeSplit = SPLIT_MODES[appState.splitMode][0];
+            if (localHasProgress) {
+                // Both local and cloud have data — ask the user what to do
+                pendingCloudData = val;
+                DOM.syncModal.classList.add('hidden');
+                DOM.syncChoiceModal.classList.remove('hidden');
+                isSyncing = false;
+            } else {
+                // No meaningful local data — just load cloud data silently
+                applyCloudData(val);
             }
-
-            const todayStr = getTodayDateString();
-            if (!appState.progress[todayStr]) {
-                appState.progress[todayStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
-            }
-            appState.selectedDate = todayStr;
-
-            saveState(true);
-
-            renderHeader();
-            renderCalendar();
-            renderSplitTabs();
-            renderSplit(appState.activeSplit);
-            updateStreakDisplay();
-
-            DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
         } else {
+            // No cloud data — upload local data
             saveDataToFirebase();
             DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
+            isSyncing = false;
         }
-        isSyncing = false;
     }).catch(err => {
         console.error("Firebase load error:", err);
         DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-red)">Sync Failed</small>`;
         isSyncing = false;
     });
+}
+
+function applyCloudData(val) {
+    appState.workouts = val.workouts || DEFAULT_WORKOUTS;
+    appState.progress = val.progress || {};
+    appState.streak = val.streak || 0;
+    appState.lastStreakUpdate = val.lastStreakUpdate || null;
+    appState.splitMode = val.splitMode || 'ppl';
+
+    if (!SPLIT_MODES[appState.splitMode].includes(appState.activeSplit)) {
+        appState.activeSplit = SPLIT_MODES[appState.splitMode][0];
+    }
+
+    const todayStr = getTodayDateString();
+    if (!appState.progress[todayStr]) {
+        appState.progress[todayStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
+    }
+    appState.selectedDate = todayStr;
+
+    saveState(true);
+
+    renderHeader();
+    renderCalendar();
+    renderSplitTabs();
+    renderSplit(appState.activeSplit);
+    updateStreakDisplay();
+
+    DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
+    isSyncing = false;
+}
+
+function mergeData(cloudVal) {
+    // Merge workouts: prefer local custom exercises, add any cloud-only splits
+    const mergedWorkouts = { ...DEFAULT_WORKOUTS };
+    // Apply cloud workouts first
+    if (cloudVal.workouts) {
+        for (const key in cloudVal.workouts) {
+            mergedWorkouts[key] = cloudVal.workouts[key];
+        }
+    }
+    // Then local workouts override (local is more recent on this device)
+    for (const key in appState.workouts) {
+        mergedWorkouts[key] = appState.workouts[key];
+    }
+
+    // Merge progress: for each date, keep the one with more completed exercises
+    const mergedProgress = { ...(cloudVal.progress || {}) };
+    for (const dateKey in appState.progress) {
+        const local = appState.progress[dateKey];
+        const cloud = mergedProgress[dateKey];
+
+        if (!cloud) {
+            mergedProgress[dateKey] = local;
+        } else {
+            // Keep the entry that has more progress
+            const localCount = (local.exercises ? local.exercises.length : 0) + (local.splitCompleted ? 100 : 0);
+            const cloudCount = (cloud.exercises ? cloud.exercises.length : 0) + (cloud.splitCompleted ? 100 : 0);
+            if (localCount >= cloudCount) {
+                mergedProgress[dateKey] = local;
+            }
+            // else keep cloud version already in mergedProgress
+        }
+    }
+
+    // Streak: keep the higher one
+    const mergedStreak = Math.max(appState.streak || 0, cloudVal.streak || 0);
+    const mergedLastStreak = mergedStreak === appState.streak ? appState.lastStreakUpdate : cloudVal.lastStreakUpdate;
+
+    // Apply merged state
+    appState.workouts = mergedWorkouts;
+    appState.progress = mergedProgress;
+    appState.streak = mergedStreak;
+    appState.lastStreakUpdate = mergedLastStreak || appState.lastStreakUpdate;
+    appState.splitMode = appState.splitMode || cloudVal.splitMode || 'ppl';
+
+    if (!SPLIT_MODES[appState.splitMode].includes(appState.activeSplit)) {
+        appState.activeSplit = SPLIT_MODES[appState.splitMode][0];
+    }
+
+    const todayStr = getTodayDateString();
+    if (!appState.progress[todayStr]) {
+        appState.progress[todayStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
+    }
+    appState.selectedDate = todayStr;
+
+    saveState(true);
+    saveDataToFirebase();
+
+    renderHeader();
+    renderCalendar();
+    renderSplitTabs();
+    renderSplit(appState.activeSplit);
+    updateStreakDisplay();
+
+    DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced (Merged)</small>`;
 }
 
 // --- Utilities ---
@@ -573,6 +668,36 @@ function bindEvents() {
     if (DOM.googleLogoutBtn) {
         DOM.googleLogoutBtn.addEventListener('click', () => {
             if (auth) auth.signOut();
+        });
+    }
+
+    // Sync Choice buttons
+    if (DOM.syncKeepLocalBtn) {
+        DOM.syncKeepLocalBtn.addEventListener('click', () => {
+            // Upload current local data to cloud, overwriting cloud
+            pendingCloudData = null;
+            DOM.syncChoiceModal.classList.add('hidden');
+            saveDataToFirebase();
+            DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced (Local → Cloud)</small>`;
+        });
+    }
+    if (DOM.syncLoadCloudBtn) {
+        DOM.syncLoadCloudBtn.addEventListener('click', () => {
+            // Load cloud data to this device
+            DOM.syncChoiceModal.classList.add('hidden');
+            if (pendingCloudData) {
+                applyCloudData(pendingCloudData);
+                pendingCloudData = null;
+            }
+        });
+    }
+    if (DOM.syncMergeBtn) {
+        DOM.syncMergeBtn.addEventListener('click', () => {
+            DOM.syncChoiceModal.classList.add('hidden');
+            if (pendingCloudData) {
+                mergeData(pendingCloudData);
+                pendingCloudData = null;
+            }
         });
     }
 

@@ -118,6 +118,38 @@
         </div>
     </div>
 
+    <!-- Sync Choice Modal -->
+    <div id="sync-choice-modal" class="modal hidden">
+        <div class="modal-content glass-panel" style="text-align: center;">
+            <div class="modal-header">
+                <h3><i class="fas fa-cloud" style="margin-right: 8px;"></i>Sync Options</h3>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">We found existing data in
+                    your cloud account. What would you like to do?</p>
+                <button id="sync-keep-local-btn" class="glass-btn glow-btn-green"
+                    style="justify-content: center; width: 100%; margin-bottom: 10px;">
+                    <i class="fas fa-upload"></i> Keep Existing Progress
+                </button>
+                <p style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 15px;">Upload your current local
+                    data to the cloud</p>
+                <button id="sync-load-cloud-btn" class="glass-btn"
+                    style="justify-content: center; width: 100%; border-color: rgba(0,170,255,0.4);">
+                    <i class="fas fa-download"></i> Load from Cloud
+                </button>
+                <p style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 15px;">Download your cloud data
+                    to
+                    this device</p>
+                <button id="sync-merge-btn" class="glass-btn"
+                    style="justify-content: center; width: 100%; border-color: rgba(200,130,255,0.4);">
+                    <i class="fas fa-code-merge"></i> Merge Both
+                </button>
+                <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 5px;">Combine cloud and local data
+                    together</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK Compat -->
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
