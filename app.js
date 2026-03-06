@@ -535,11 +535,67 @@ function renderSplit(splitName) {
 
     if (splitName === 'rest') {
         DOM.splitTitle.textContent = 'Rest Day';
-        DOM.exerciseList.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">Take a break! No exercises for this day.</p>';
-        DOM.splitProgressBar.style.width = '0%';
-        DOM.splitProgressBar.classList.remove('complete');
-        DOM.splitStatusText.textContent = 'Rest Day';
-        DOM.splitStatusText.className = 'status-text glow-text-white';
+        const restCompleted = selectedProg.splitCompleted === 'rest';
+
+        // Build a rest day card with a checkbox
+        const disabledAttr = (isPast || isFuture) ? 'disabled' : '';
+        const checkedClass = restCompleted ? 'checked' : '';
+        const cursorStyle = (isPast || isFuture) ? 'cursor: not-allowed; opacity: 0.5;' : 'cursor: pointer;';
+
+        DOM.exerciseList.innerHTML = `
+            <li class="exercise-item ${restCompleted ? 'checked' : ''}" id="rest-day-item">
+                <div class="exercise-bg-animation"></div>
+                <div class="exercise-info">
+                    <div class="custom-checkbox ${checkedClass} ${(isPast || isFuture) ? 'disabled' : ''}" id="rest-day-checkbox" style="${cursorStyle}">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <div class="exercise-details">
+                        <h4>Rest Day</h4>
+                        <span class="exercise-meta">Take a break! Recovery is important 💤</span>
+                    </div>
+                </div>
+            </li>
+        `;
+
+        // Add click handler for checkbox (only for today)
+        if (isToday) {
+            const restCheckbox = document.getElementById('rest-day-checkbox');
+            if (restCheckbox) {
+                restCheckbox.addEventListener('click', () => {
+                    if (selectedProg.splitCompleted === 'rest') {
+                        // Uncheck
+                        selectedProg.splitCompleted = null;
+                        if (appState.lastStreakUpdate === selectedDateStr) {
+                            appState.streak = Math.max(0, appState.streak - 1);
+                            appState.lastStreakUpdate = null;
+                            updateStreakDisplay();
+                        }
+                    } else {
+                        // Check
+                        selectedProg.splitCompleted = 'rest';
+                        if (appState.lastStreakUpdate !== selectedDateStr) {
+                            appState.streak++;
+                            appState.lastStreakUpdate = selectedDateStr;
+                            updateStreakDisplay();
+                        }
+                    }
+                    saveState();
+                    renderCalendar();
+                    renderSplit('rest');
+                });
+            }
+        }
+
+        DOM.splitProgressBar.style.width = restCompleted ? '100%' : '0%';
+        if (restCompleted) {
+            DOM.splitProgressBar.classList.add('complete');
+            DOM.splitStatusText.textContent = 'Rest Day Complete!';
+            DOM.splitStatusText.className = 'status-text glow-text-green';
+        } else {
+            DOM.splitProgressBar.classList.remove('complete');
+            DOM.splitStatusText.textContent = 'Rest Day';
+            DOM.splitStatusText.className = 'status-text glow-text-white';
+        }
         DOM.addExerciseBtn.style.display = 'none';
         DOM.editModeBtn.style.display = 'none';
         DOM.customizeDayBtn.classList.add('hidden');
