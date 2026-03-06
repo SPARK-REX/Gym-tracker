@@ -414,10 +414,11 @@ function renderCalendar() {
         node.addEventListener('click', () => {
             appState.selectedDate = dateStr;
             if (!appState.progress[dateStr]) {
-                appState.progress[dateStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
+                appState.progress[dateStr] = { splitCompleted: null, exercises: [] };
             }
             const p = appState.progress[dateStr];
-            const targetSplit = p.splitCompleted || p.plannedSplit || appState.activeSplit || 'push';
+            // For past days with a completed split, show that split; otherwise keep current active split
+            const targetSplit = p.splitCompleted || appState.activeSplit || SPLIT_MODES[appState.splitMode][0];
             renderCalendar();
             renderSplit(targetSplit);
         });
@@ -481,11 +482,7 @@ function renderSplit(splitName) {
     const isFuture = selectedDateStr > todayStr;
     const isPast = selectedDateStr < todayStr;
 
-    if (isFuture) {
-        selectedProg.plannedSplit = splitName === 'rest' ? 'rest' : splitName;
-        saveState();
-        renderCalendar();
-    }
+    // No auto-assignment of splits to days — user can freely pick any workout
 
     // Update Tabs
     const isCompletedSplit = selectedProg.splitCompleted === splitName;
@@ -509,7 +506,7 @@ function renderSplit(splitName) {
         DOM.exerciseList.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">Take a break! No exercises for this day.</p>';
         DOM.splitProgressBar.style.width = '0%';
         DOM.splitProgressBar.classList.remove('complete');
-        DOM.splitStatusText.textContent = isPast ? 'Rest Day' : 'Rest Planned';
+        DOM.splitStatusText.textContent = 'Rest Day';
         DOM.splitStatusText.className = 'status-text glow-text-white';
         DOM.addExerciseBtn.style.display = 'none';
         DOM.editModeBtn.style.display = 'none';
