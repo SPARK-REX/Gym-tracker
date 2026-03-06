@@ -56,10 +56,21 @@ const SPLIT_MODES = {
     bro: ['chest', 'back', 'shoulders', 'legs', 'biceps', 'triceps', 'abs', 'rest']
 };
 
+const savedWorkouts = JSON.parse(localStorage.getItem('gymWorkouts')) || {};
+// Merge so that DEFAULT_WORKOUTS always fills in missing splits, but saved data takes priority per-key
+const mergedWorkouts = { ...DEFAULT_WORKOUTS };
+for (const key of Object.keys(savedWorkouts)) {
+    if (Array.isArray(savedWorkouts[key]) && savedWorkouts[key].length > 0) {
+        mergedWorkouts[key] = savedWorkouts[key];
+    }
+}
+
+const savedSplitMode = localStorage.getItem('gymSplitMode') || 'ppl';
+
 let appState = {
-    workouts: { ...DEFAULT_WORKOUTS, ...(JSON.parse(localStorage.getItem('gymWorkouts')) || {}) },
-    splitMode: localStorage.getItem('gymSplitMode') || 'ppl',
-    activeSplit: 'push',
+    workouts: mergedWorkouts,
+    splitMode: savedSplitMode,
+    activeSplit: SPLIT_MODES[savedSplitMode][0],
     progress: JSON.parse(localStorage.getItem('gymProgress')) || {}, // { "YYYY-MM-DD": { splitCompleted: "push", exercises: ["1", "2"] } }
     streak: parseInt(localStorage.getItem('gymStreak')) || 0,
     lastStreakUpdate: localStorage.getItem('gymLastStreakUpdate') || null
@@ -320,6 +331,27 @@ if (!appState.progress[todayStr]) {
     appState.progress[todayStr] = { splitCompleted: null, exercises: [], plannedSplit: null };
 }
 appState.selectedDate = todayStr;
+
+// Seed past workout data (March 1–5, 2026) — one-time
+if (!localStorage.getItem('seedDataApplied')) {
+    const seedData = {
+        '2026-03-01': 'push',
+        '2026-03-02': 'pull',
+        '2026-03-03': 'legs',
+        '2026-03-04': 'abs',
+        '2026-03-05': 'pull'
+    };
+    for (const [date, split] of Object.entries(seedData)) {
+        if (!appState.progress[date] || !appState.progress[date].splitCompleted) {
+            const exercises = (appState.workouts[split] || []).map(ex => ex.id);
+            appState.progress[date] = { splitCompleted: split, exercises: exercises };
+        }
+    }
+    appState.streak = 5;
+    appState.lastStreakUpdate = '2026-03-05';
+    localStorage.setItem('seedDataApplied', 'true');
+    saveState();
+}
 
 // Check streak
 function checkAndUpdateStreak() {
