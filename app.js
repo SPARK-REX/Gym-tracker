@@ -332,24 +332,46 @@ if (!appState.progress[todayStr]) {
 }
 appState.selectedDate = todayStr;
 
-// Seed past workout data (March 1–5, 2026) — one-time
-if (!localStorage.getItem('seedDataApplied')) {
+// Seed past workout data (March 1–12, 2026) — one-time
+if (!localStorage.getItem('seedDataAppliedV2')) {
     const seedData = {
         '2026-03-01': 'push',
         '2026-03-02': 'pull',
         '2026-03-03': 'legs',
         '2026-03-04': 'abs',
-        '2026-03-05': 'pull'
+        '2026-03-05': 'pull',
+        '2026-03-06': 'push',
+        '2026-03-07': 'legs',
+        '2026-03-08': 'rest',
+        '2026-03-09': 'chest',
+        '2026-03-10': 'back',
+        '2026-03-11': 'shoulders',
+        '2026-03-12': 'arms' // Will map to 'biceps' due to custom logic below if 'arms' isn't explicitly defined
     };
-    for (const [date, split] of Object.entries(seedData)) {
+    
+    // Fallback mapping if 'arms' isn't in default workouts
+    const workoutMap = {
+        'arms': 'biceps'
+    };
+
+    for (const [date, originalSplit] of Object.entries(seedData)) {
         if (!appState.progress[date] || !appState.progress[date].splitCompleted) {
-            const exercises = (appState.workouts[split] || []).map(ex => ex.id);
+            const split = workoutMap[originalSplit] || originalSplit;
+            // Get all exercise IDs for that split, or empty array for rest
+            const exercises = split === 'rest' ? [] : (appState.workouts[split] || []).map(ex => ex.id);
             appState.progress[date] = { splitCompleted: split, exercises: exercises };
         }
     }
-    appState.streak = 5;
-    appState.lastStreakUpdate = '2026-03-05';
-    localStorage.setItem('seedDataApplied', 'true');
+    appState.streak = 12;
+    appState.lastStreakUpdate = '2026-03-12';
+    
+    // Also save a custom workout for fun on one of the days
+    appState.progress['2026-03-10'].customExercises = [
+        ...appState.workouts['back'],
+        { id: generateId(), name: 'Extra Lat Pulldowns', sets: 4, reps: 15, createdAt: '2026-03-10' }
+    ];
+
+    localStorage.setItem('seedDataAppliedV2', 'true');
     saveState();
 }
 
