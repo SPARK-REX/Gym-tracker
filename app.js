@@ -635,7 +635,15 @@ function renderSplit(splitName) {
 
     // Custom Workout Logic
     const isCustom = Array.isArray(selectedProg.customExercises);
-    const exercises = isCustom ? selectedProg.customExercises : (appState.workouts[splitName] || []);
+    let exercises = isCustom ? selectedProg.customExercises : (appState.workouts[splitName] || []);
+
+    if (!isCustom) {
+        exercises = exercises.filter(ex => {
+            if (ex.createdAt && ex.createdAt > selectedDateStr) return false;
+            if (ex.deletedAt && ex.deletedAt <= selectedDateStr) return false;
+            return true;
+        });
+    }
 
     if (isCustom) {
         DOM.splitTitle.textContent = splitName.charAt(0).toUpperCase() + splitName.slice(1) + ' Exercises (Custom)';
@@ -856,7 +864,10 @@ function bindEvents() {
                 if (isCustom) {
                     selectedProg.customExercises = selectedProg.customExercises.filter(e => e.id !== id);
                 } else {
-                    appState.workouts[appState.activeSplit] = appState.workouts[appState.activeSplit].filter(e => e.id !== id);
+                    const ex = appState.workouts[appState.activeSplit].find(e => e.id === id);
+                    if (ex) {
+                        ex.deletedAt = appState.selectedDate;
+                    }
                 }
 
                 // Always clean from today track progress array
@@ -893,7 +904,14 @@ function bindEvents() {
             console.log("Customizing day...");
             const selectedProg = appState.progress[appState.selectedDate];
             const templateExercises = appState.workouts[appState.activeSplit] || [];
-            selectedProg.customExercises = JSON.parse(JSON.stringify(templateExercises));
+            
+            const currentExercises = templateExercises.filter(ex => {
+                if (ex.createdAt && ex.createdAt > appState.selectedDate) return false;
+                if (ex.deletedAt && ex.deletedAt <= appState.selectedDate) return false;
+                return true;
+            });
+            
+            selectedProg.customExercises = JSON.parse(JSON.stringify(currentExercises));
             saveState();
             renderSplit(appState.activeSplit);
         }
@@ -967,7 +985,8 @@ function saveExercise() {
         // Add new
         targetArray.push({
             id: generateId(),
-            name, sets, reps
+            name, sets, reps,
+            createdAt: appState.selectedDate
         });
     }
 
