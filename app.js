@@ -181,7 +181,10 @@ function loadDataFromFirebase() {
     const syncChoiceKey = 'gymSyncChoiceMade_' + currentUser.uid;
     const alreadyChosen = sessionStorage.getItem(syncChoiceKey);
 
-    db.ref('users/' + currentUser.uid + '/appState').once('value').then(snapshot => {
+    const fetchPromise = db.ref('users/' + currentUser.uid + '/appState').once('value');
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 10000));
+
+    Promise.race([fetchPromise, timeoutPromise]).then(snapshot => {
         const val = snapshot.val();
         if (val) {
             if (alreadyChosen) {
@@ -197,9 +200,9 @@ function loadDataFromFirebase() {
         } else {
             // No cloud data — upload local data
             sessionStorage.setItem(syncChoiceKey, 'true');
+            isSyncing = false; // Must be false before saving
             saveDataToFirebase();
             DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
-            isSyncing = false;
         }
     }).catch(err => {
         console.error("Firebase load error:", err);
