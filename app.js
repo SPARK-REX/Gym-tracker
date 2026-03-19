@@ -565,14 +565,19 @@ function renderSplit(splitName) {
         const anyCompleted = restCompleted || feverCompleted;
 
         // Build a rest day card with a checkbox
-        const disabledAttr = (isPast || isFuture) ? 'disabled' : '';
-        const cursorStyle = (isPast || isFuture) ? 'cursor: not-allowed; opacity: 0.5;' : 'cursor: pointer;';
+        // For past/future days: completed items still glow, only unchecked items are dimmed
+        const restCursorStyle = (isPast || isFuture)
+            ? (restCompleted ? 'cursor: not-allowed;' : 'cursor: not-allowed; opacity: 0.5;')
+            : 'cursor: pointer;';
+        const feverCursorStyle = (isPast || isFuture)
+            ? (feverCompleted ? 'cursor: not-allowed;' : 'cursor: not-allowed; opacity: 0.5;')
+            : 'cursor: pointer;';
 
         DOM.exerciseList.innerHTML = `
             <li class="exercise-item ${restCompleted ? 'checked' : ''}" id="rest-day-item">
                 <div class="exercise-bg-animation"></div>
                 <div class="exercise-info">
-                    <div class="custom-checkbox ${restCompleted ? 'checked' : ''} ${(isPast || isFuture) ? 'disabled' : ''}" id="rest-day-checkbox" style="${cursorStyle}">
+                    <div class="custom-checkbox ${restCompleted ? 'checked' : ''} ${(isPast || isFuture) ? 'disabled' : ''}" id="rest-day-checkbox" style="${restCursorStyle}">
                         <i class="fas fa-check"></i>
                     </div>
                     <div class="exercise-details">
@@ -584,7 +589,7 @@ function renderSplit(splitName) {
             <li class="exercise-item ${feverCompleted ? 'checked' : ''}" id="fever-day-item">
                 <div class="exercise-bg-animation"></div>
                 <div class="exercise-info">
-                    <div class="custom-checkbox ${feverCompleted ? 'checked' : ''} ${(isPast || isFuture) ? 'disabled' : ''}" id="fever-day-checkbox" style="${cursorStyle}">
+                    <div class="custom-checkbox ${feverCompleted ? 'checked' : ''} ${(isPast || isFuture) ? 'disabled' : ''}" id="fever-day-checkbox" style="${feverCursorStyle}">
                         <i class="fas fa-check"></i>
                     </div>
                     <div class="exercise-details">
