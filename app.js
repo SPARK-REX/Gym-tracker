@@ -475,7 +475,9 @@ function renderCalendar() {
             }
             const p = appState.progress[dateStr];
             // For past days with a completed split, show that split; otherwise keep current active split
-            const targetSplit = p.splitCompleted || appState.activeSplit || SPLIT_MODES[appState.splitMode][0];
+            // 'fever' is stored as splitCompleted but maps to the 'rest' tab
+            const rawSplit = p.splitCompleted || appState.activeSplit || SPLIT_MODES[appState.splitMode][0];
+            const targetSplit = rawSplit === 'fever' ? 'rest' : rawSplit;
             renderCalendar();
             renderSplit(targetSplit);
         });
@@ -771,7 +773,7 @@ function renderSplit(splitName) {
             DOM.splitStatusText.className = 'status-text glow-text-red';
         }
 
-        if (selectedProg.splitCompleted === splitName) {
+        if (selectedProg.splitCompleted === splitName && selectedProg.splitCompleted !== 'fever' && selectedProg.splitCompleted !== 'rest') {
             selectedProg.splitCompleted = null;
 
             if (isToday) {
