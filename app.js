@@ -56,14 +56,18 @@ const SPLIT_MODES = {
     bro: ['chest', 'back', 'shoulders', 'legs', 'biceps', 'triceps', 'abs', 'rest']
 };
 
-const savedWorkouts = JSON.parse(localStorage.getItem('gymWorkouts')) || {};
-// Merge so that DEFAULT_WORKOUTS always fills in missing splits, but saved data takes priority per-key
-const mergedWorkouts = { ...DEFAULT_WORKOUTS };
-for (const key of Object.keys(savedWorkouts)) {
-    if (Array.isArray(savedWorkouts[key]) && savedWorkouts[key].length > 0) {
-        mergedWorkouts[key] = savedWorkouts[key];
+function ensureDefaultWorkouts(workoutsObj) {
+    const result = { ...(workoutsObj || {}) };
+    for (const splitKey in DEFAULT_WORKOUTS) {
+        if (!Array.isArray(result[splitKey]) || result[splitKey].length === 0) {
+            result[splitKey] = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS[splitKey]));
+        }
     }
+    return result;
 }
+
+const savedWorkouts = JSON.parse(localStorage.getItem('gymWorkouts')) || {};
+const mergedWorkouts = ensureDefaultWorkouts(savedWorkouts);
 
 const savedSplitMode = localStorage.getItem('gymSplitMode') || 'ppl';
 
@@ -254,7 +258,7 @@ function loadDataFromFirebase() {
 }
 
 function applyCloudData(val) {
-    appState.workouts = val.workouts || DEFAULT_WORKOUTS;
+    appState.workouts = ensureDefaultWorkouts(val.workouts);
     appState.progress = val.progress || {};
     appState.streak = val.streak || 0;
     appState.lastStreakUpdate = val.lastStreakUpdate || null;
@@ -283,18 +287,9 @@ function applyCloudData(val) {
 }
 
 function mergeData(cloudVal) {
-    // Merge workouts: prefer local custom exercises, add any cloud-only splits
-    const mergedWorkouts = { ...DEFAULT_WORKOUTS };
-    // Apply cloud workouts first
-    if (cloudVal.workouts) {
-        for (const key in cloudVal.workouts) {
-            mergedWorkouts[key] = cloudVal.workouts[key];
-        }
-    }
-    // Then local workouts override (local is more recent on this device)
-    for (const key in appState.workouts) {
-        mergedWorkouts[key] = appState.workouts[key];
-    }
+    // Merge workouts: combine cloud and local workouts, ensuring defaults fill missing categories
+    const combined = { ...(cloudVal.workouts || {}), ...(appState.workouts || {}) };
+    const mergedWorkouts = ensureDefaultWorkouts(combined);
 
     // Merge progress: for each date, keep the one with more completed exercises
     const mergedProgress = { ...(cloudVal.progress || {}) };
@@ -764,7 +759,24 @@ function renderSplit(splitName) {
     let completedCount = 0;
 
     if (exercises.length === 0) {
-        DOM.exerciseList.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">No exercises here. Add some!</p>';
+        DOM.exerciseList.innerHTML = `
+            <div style="text-align:center; padding:24px 10px;">
+                <p style="color:var(--text-muted); margin-bottom: 14px;">No exercises listed for ${splitName.toUpperCase()}.</p>
+                <button id="restore-defaults-btn" class="glass-btn glow-btn-green" style="margin:0 auto; max-width: 260px;">
+                    <i class="fas fa-redo-alt"></i> Restore Preloaded Workouts
+                </button>
+            </div>
+        `;
+        setTimeout(() => {
+            const restoreBtn = document.getElementById('restore-defaults-btn');
+            if (restoreBtn) {
+                restoreBtn.onclick = () => {
+                    appState.workouts[splitName] = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS[splitName] || []));
+                    saveState();
+                    renderSplit(splitName);
+                };
+            }
+        }, 10);
     }
 
     exercises.forEach(ex => {
@@ -1514,6 +1526,8 @@ function parseAiTextToHtml(text) {
 }
 
 function addExerciseFromAi(targetSplit, name, sets, reps, btnElement) {
+    appState.workouts = ensureDefaultWorkouts(appState.workouts);
+
     if (!appState.workouts[targetSplit]) {
         appState.workouts[targetSplit] = [];
     }
@@ -1522,7 +1536,7 @@ function addExerciseFromAi(targetSplit, name, sets, reps, btnElement) {
         id: generateId(),
         name: name,
         sets: parseInt(sets) || 3,
-        reps: reps || '10',
+        reps: String(reps) || '10',
         createdAt: appState.selectedDate
     };
 
@@ -1536,17 +1550,29 @@ function addExerciseFromAi(targetSplit, name, sets, reps, btnElement) {
     }
 
     saveState();
-    renderSplit(appState.activeSplit);
+
+    // Auto-switch to the target split tab (and switch split mode if necessary) so the user immediately sees the exercise!
+    if (!SPLIT_MODES[appState.splitMode].includes(targetSplit)) {
+        if (['chest', 'back', 'shoulders', 'biceps', 'triceps'].includes(targetSplit)) {
+            appState.splitMode = 'bro';
+        } else if (['push', 'pull'].includes(targetSplit)) {
+            appState.splitMode = 'ppl';
+        }
+    }
+    appState.activeSplit = targetSplit;
+
+    renderSplitTabs();
+    renderSplit(targetSplit);
 
     if (btnElement) {
         btnElement.classList.add('added');
-        btnElement.innerHTML = `<i class="fas fa-check"></i> Added`;
+        btnElement.innerHTML = `<i class="fas fa-check"></i> Added to ${targetSplit.toUpperCase()}`;
     }
 }
 
 function applyWeekPlanFromAi(weekPlanData, btnElement) {
     for (const splitKey in weekPlanData) {
-        if (Array.isArray(weekPlanData[splitKey])) {
+        if (Array.isArray(weekPlanData[splitKey]) && weekPlanData[splitKey].length > 0) {
             appState.workouts[splitKey] = weekPlanData[splitKey].map(ex => ({
                 id: generateId(),
                 name: ex.name,
@@ -1556,13 +1582,14 @@ function applyWeekPlanFromAi(weekPlanData, btnElement) {
             }));
         }
     }
+    appState.workouts = ensureDefaultWorkouts(appState.workouts);
 
     saveState();
     renderSplitTabs();
     renderSplit(appState.activeSplit);
 
     if (btnElement) {
-        btnElement.innerHTML = `<i class="fas fa-check-circle"></i> Applied to Gym Tracker!`;
+        btnElement.innerHTML = `<i class="fas fa-check-circle"></i> Applied to All Days!`;
         btnElement.style.background = 'var(--neon-green)';
         btnElement.style.color = 'var(--bg-dark)';
     }
