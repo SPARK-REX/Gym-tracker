@@ -207,6 +207,59 @@
                     </button>
                     <p class="option-subtext">Combine local workouts and cloud workouts together</p>
                 </div>
+    <!-- Floating AI Assistant Action Button -->
+    <button id="ai-coach-fab" class="ai-fab-btn" title="Ask PULSE AI Fitness Coach">
+        <i class="fas fa-robot"></i>
+        <span class="ai-fab-badge">AI</span>
+    </button>
+
+    <!-- Modal: PULSE AI Fitness Coach -->
+    <div id="ai-modal" class="modal hidden">
+        <div class="modal-content glass-panel ai-modal-content">
+            <div class="modal-header ai-modal-header">
+                <div class="ai-title-group">
+                    <i class="fas fa-brain glow-icon-cyan"></i>
+                    <h3>PULSE AI COACH</h3>
+                </div>
+                <div class="ai-header-actions">
+                    <button id="ai-settings-toggle-btn" class="icon-btn" title="Gemini API Key Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button id="close-ai-btn" class="icon-btn"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+
+            <!-- API Key Settings Drawer (Collapsible) -->
+            <div id="ai-settings-drawer" class="ai-settings-drawer hidden">
+                <label for="gemini-key-input"><i class="fas fa-key"></i> Gemini API Key (Optional)</label>
+                <div class="key-input-row">
+                    <input type="password" id="gemini-key-input" placeholder="Paste AIzaSy... key here" class="glass-input">
+                    <button id="save-gemini-key-btn" class="small-btn glass-btn">Save</button>
+                </div>
+                <small class="key-subtext">Optional. Uses built-in Cyberpunk AI Fitness Engine if empty.</small>
+            </div>
+
+            <div class="ai-modal-body">
+                <!-- Chat Message Container -->
+                <div id="ai-chat-history" class="ai-chat-history">
+                    <!-- Dynamic chat bubbles injected here -->
+                </div>
+
+                <!-- Quick Suggestion Chips -->
+                <div id="ai-quick-chips" class="ai-quick-chips">
+                    <button class="ai-chip" data-query="What workouts should I do on Pull day?"><i class="fas fa-dumbbell"></i> Pull Day Workouts</button>
+                    <button class="ai-chip" data-query="Which muscles work on Push day?"><i class="fas fa-child"></i> Push Day Muscles</button>
+                    <button class="ai-chip" data-query="Generate a full week workout plan for me"><i class="fas fa-calendar-plus"></i> Generate Full Week Plan</button>
+                    <button class="ai-chip" data-query="What are the best chest exercises?"><i class="fas fa-fire"></i> Best Chest Workouts</button>
+                </div>
+
+                <!-- Chat Input Form -->
+                <form id="ai-chat-form" class="ai-chat-form">
+                    <input type="text" id="ai-input" placeholder="Ask AI coach (e.g. Pull workouts, Push muscles...)" class="glass-input" autocomplete="off">
+                    <button type="submit" id="ai-send-btn" class="glass-btn glow-btn-cyan">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
             </div>
         </div>
     </div>

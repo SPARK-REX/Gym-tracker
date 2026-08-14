@@ -116,7 +116,20 @@ const DOM = {
     syncChoiceModal: document.getElementById('sync-choice-modal'),
     syncKeepLocalBtn: document.getElementById('sync-keep-local-btn'),
     syncLoadCloudBtn: document.getElementById('sync-load-cloud-btn'),
-    syncMergeBtn: document.getElementById('sync-merge-btn')
+    syncMergeBtn: document.getElementById('sync-merge-btn'),
+
+    // AI Coach
+    aiFabBtn: document.getElementById('ai-coach-fab'),
+    aiModal: document.getElementById('ai-modal'),
+    closeAiBtn: document.getElementById('close-ai-btn'),
+    aiSettingsToggleBtn: document.getElementById('ai-settings-toggle-btn'),
+    aiSettingsDrawer: document.getElementById('ai-settings-drawer'),
+    geminiKeyInput: document.getElementById('gemini-key-input'),
+    saveGeminiKeyBtn: document.getElementById('save-gemini-key-btn'),
+    aiChatHistory: document.getElementById('ai-chat-history'),
+    aiQuickChips: document.getElementById('ai-quick-chips'),
+    aiChatForm: document.getElementById('ai-chat-form'),
+    aiInput: document.getElementById('ai-input')
 };
 
 // --- Firebase Setup ---
@@ -132,11 +145,40 @@ const firebaseConfig = {
 };
 
 let auth, db, currentUser;
+
+function handleAuthError(err) {
+    console.error("Firebase Auth Error:", err);
+    if (!DOM.syncStatus) return;
+    
+    let message = "Sign-in failed. Please try again.";
+    if (err.code === 'auth/unauthorized-domain') {
+        message = `<strong>Unauthorized Domain!</strong><br><small style="color:var(--neon-red)">Please add <code>${window.location.hostname}</code> to <em>Firebase Console → Authentication → Settings → Authorized domains</em>.</small>`;
+    } else if (err.code === 'auth/operation-not-allowed') {
+        message = `<strong>Google Sign-In Disabled!</strong><br><small style="color:var(--neon-red)">Enable Google under <em>Firebase Console → Authentication → Sign-in method</em>.</small>`;
+    } else if (err.code === 'auth/popup-blocked') {
+        message = `<strong>Popup Blocked!</strong><br><small style="color:var(--neon-red)">Please allow popups or try again.</small>`;
+    } else if (err.code === 'auth/popup-closed-by-user') {
+        message = `<small style="color:var(--text-muted)">Sign-in popup was closed.</small>`;
+    } else if (err.message) {
+        message = `<small style="color:var(--neon-red)">${err.message}</small>`;
+    }
+    DOM.syncStatus.innerHTML = message;
+}
+
 try {
     if (typeof firebase !== 'undefined') {
         firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
         db = firebase.database();
+
+        // Process returning redirect sign-in results for mobile/fallback login
+        auth.getRedirectResult().then(result => {
+            if (result && result.user) {
+                console.log("Logged in via Google redirect:", result.user.displayName || result.user.email);
+            }
+        }).catch(err => {
+            handleAuthError(err);
+        });
 
         auth.onAuthStateChanged(user => {
             currentUser = user;
@@ -415,6 +457,7 @@ function init() {
 
     renderSplitTabs();
     bindEvents();
+    initAiCoach();
     renderSplit(appState.activeSplit);
     updateStreakDisplay();
 }
@@ -828,12 +871,39 @@ function bindEvents() {
     }
     if (DOM.googleLoginBtn) {
         DOM.googleLoginBtn.addEventListener('click', () => {
-            if (!auth) return alert("Firebase not configured! Please add your config in app.js.");
+            if (!auth) {
+                alert("Firebase not configured! Please check your app.js config.");
+                return;
+            }
+
+            DOM.syncStatus.innerHTML = `<small style="color:var(--neon-green)"><i class="fas fa-spinner fa-spin"></i> Connecting to Google...</small>`;
+
             const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(err => {
-                console.error(err);
-                alert("Sign-in error: " + err.message);
-            });
+            provider.addScope('profile');
+            provider.addScope('email');
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+            if (isMobile) {
+                auth.signInWithRedirect(provider).catch(err => {
+                    handleAuthError(err);
+                });
+            } else {
+                auth.signInWithPopup(provider).then(result => {
+                    if (result && result.user) {
+                        console.log("Google popup sign-in successful:", result.user.displayName || result.user.email);
+                    }
+                }).catch(err => {
+                    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/operation-not-supported-in-this-environment') {
+                        console.warn("Popup unavailable or blocked, falling back to redirect auth...", err);
+                        auth.signInWithRedirect(provider).catch(reErr => {
+                            handleAuthError(reErr);
+                        });
+                    } else {
+                        handleAuthError(err);
+                    }
+                });
+            }
         });
     }
     if (DOM.googleLogoutBtn) {
@@ -841,7 +911,11 @@ function bindEvents() {
             if (currentUser) {
                 sessionStorage.removeItem('gymSyncChoiceMade_' + currentUser.uid);
             }
-            if (auth) auth.signOut();
+            if (auth) {
+                auth.signOut().then(() => {
+                    DOM.syncStatus.textContent = 'Not connected. Data is saved locally.';
+                }).catch(err => console.error("Sign out error:", err));
+            }
         });
     }
 
@@ -1050,6 +1124,454 @@ function saveExercise() {
     saveState();
     renderSplit(appState.activeSplit);
     closeModal();
+}
+
+// --- PULSE AI Fitness Coach Logic ---
+let aiChatHistory = [
+    {
+        sender: 'assistant',
+        html: '⚡ Welcome to <strong>PULSE AI Fitness Coach</strong>!<br>Ask me anything about your workouts, muscle groups (e.g. <em>"What workouts for pull day?"</em>, <em>"Muscles working on Push day"</em>), or ask me to <strong>generate a full week workout plan</strong> for you!'
+    }
+];
+
+function initAiCoach() {
+    if (!DOM.aiFabBtn) return;
+
+    // Load saved Gemini Key if exists
+    const savedKey = localStorage.getItem('gymGeminiApiKey') || '';
+    if (DOM.geminiKeyInput) DOM.geminiKeyInput.value = savedKey;
+
+    DOM.aiFabBtn.addEventListener('click', openAiModal);
+    if (DOM.closeAiBtn) DOM.closeAiBtn.addEventListener('click', closeAiModal);
+    if (DOM.aiSettingsToggleBtn) {
+        DOM.aiSettingsToggleBtn.addEventListener('click', () => {
+            if (DOM.aiSettingsDrawer) DOM.aiSettingsDrawer.classList.toggle('hidden');
+        });
+    }
+
+    if (DOM.saveGeminiKeyBtn) {
+        DOM.saveGeminiKeyBtn.addEventListener('click', () => {
+            const key = DOM.geminiKeyInput.value.trim();
+            localStorage.setItem('gymGeminiApiKey', key);
+            alert(key ? 'Gemini API Key saved!' : 'Gemini Key cleared. Using built-in AI Fitness Engine.');
+            if (DOM.aiSettingsDrawer) DOM.aiSettingsDrawer.classList.add('hidden');
+        });
+    }
+
+    if (DOM.aiChatForm) {
+        DOM.aiChatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const query = DOM.aiInput.value.trim();
+            if (!query) return;
+            DOM.aiInput.value = '';
+            handleUserAiQuery(query);
+        });
+    }
+
+    if (DOM.aiQuickChips) {
+        DOM.aiQuickChips.addEventListener('click', (e) => {
+            const chip = e.target.closest('.ai-chip');
+            if (chip && chip.dataset.query) {
+                handleUserAiQuery(chip.dataset.query);
+            }
+        });
+    }
+
+    renderAiChatHistory();
+}
+
+function openAiModal() {
+    if (DOM.aiModal) DOM.aiModal.classList.remove('hidden');
+    renderAiChatHistory();
+    if (DOM.aiInput) DOM.aiInput.focus();
+}
+
+function closeAiModal() {
+    if (DOM.aiModal) DOM.aiModal.classList.add('hidden');
+}
+
+function renderAiChatHistory() {
+    if (!DOM.aiChatHistory) return;
+    DOM.aiChatHistory.innerHTML = '';
+
+    aiChatHistory.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `ai-msg ${msg.sender}`;
+
+        const headerHtml = msg.sender === 'assistant' 
+            ? `<div class="msg-header"><i class="fas fa-robot"></i> PULSE AI COACH</div>` 
+            : `<div class="msg-header" style="color:var(--neon-green)">YOU</div>`;
+
+        div.innerHTML = `
+            ${headerHtml}
+            <div class="msg-bubble">${msg.html || msg.text}</div>
+        `;
+        DOM.aiChatHistory.appendChild(div);
+    });
+
+    // Delegate click handler for AI Action buttons inside bubbles
+    DOM.aiChatHistory.querySelectorAll('.ai-add-ex-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            const split = btn.dataset.split;
+            const name = btn.dataset.name;
+            const sets = btn.dataset.sets;
+            const reps = btn.dataset.reps;
+            addExerciseFromAi(split, name, sets, reps, btn);
+        };
+    });
+
+    DOM.aiChatHistory.querySelectorAll('.ai-apply-week-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            const weekDataRaw = btn.dataset.weekplan;
+            try {
+                const weekData = JSON.parse(decodeURIComponent(weekDataRaw));
+                applyWeekPlanFromAi(weekData, btn);
+            } catch (err) {
+                console.error("Weekplan parse error:", err);
+            }
+        };
+    });
+
+    DOM.aiChatHistory.scrollTop = DOM.aiChatHistory.scrollHeight;
+}
+
+async function handleUserAiQuery(userText) {
+    aiChatHistory.push({ sender: 'user', text: escapeHtml(userText) });
+    renderAiChatHistory();
+
+    // Add typing indicator placeholder
+    const loadingMsgObj = { sender: 'assistant', html: '<i class="fas fa-spinner fa-spin"></i> Analyzing fitness data...' };
+    aiChatHistory.push(loadingMsgObj);
+    renderAiChatHistory();
+
+    const responseData = await fetchAiResponse(userText);
+    
+    // Replace loading placeholder
+    aiChatHistory.pop();
+    aiChatHistory.push({ sender: 'assistant', html: responseData.html });
+    renderAiChatHistory();
+}
+
+async function fetchAiResponse(query) {
+    const apiKey = localStorage.getItem('gymGeminiApiKey');
+    if (apiKey) {
+        try {
+            const prompt = `You are PULSE AI, a Cyberpunk Gym Coach. User query: "${query}". Respond concisely in HTML (use standard tags like <strong>, <p>, <ul>, <li>). Whenever you suggest specific exercises, include them in standard text format.`;
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }]
+                })
+            });
+            const data = await res.json();
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                const text = data.candidates[0].content.parts[0].text;
+                return parseAiTextToHtml(text);
+            }
+        } catch (e) {
+            console.warn("Gemini API call failed, falling back to built-in AI Fitness Engine:", e);
+        }
+    }
+
+    // Use built-in Cyberpunk AI Fitness Knowledge Engine
+    return generateBuiltInAiResponse(query);
+}
+
+function generateBuiltInAiResponse(query) {
+    const q = query.toLowerCase();
+
+    // 1. Full Week Workout Plan
+    if (q.includes('week') || q.includes('full plan') || q.includes('schedule') || q.includes('routine')) {
+        const weekPlan = {
+            push: [
+                { name: 'Barbell Bench Press', sets: 4, reps: 8 },
+                { name: 'Overhead Press', sets: 3, reps: 10 },
+                { name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
+                { name: 'Tricep Pushdowns', sets: 3, reps: 12 },
+                { name: 'Lateral Raises', sets: 4, reps: 15 }
+            ],
+            pull: [
+                { name: 'Deadlifts', sets: 3, reps: 5 },
+                { name: 'Pull-ups', sets: 3, reps: 8 },
+                { name: 'Barbell Rows', sets: 3, reps: 10 },
+                { name: 'Face Pulls', sets: 3, reps: 15 },
+                { name: 'Bicep Curls', sets: 3, reps: 12 }
+            ],
+            legs: [
+                { name: 'Squats', sets: 4, reps: 8 },
+                { name: 'Leg Press', sets: 3, reps: 10 },
+                { name: 'Romanian Deadlifts', sets: 3, reps: 10 },
+                { name: 'Leg Extensions', sets: 3, reps: 15 },
+                { name: 'Calf Raises', sets: 4, reps: 20 }
+            ],
+            chest: [
+                { name: 'Barbell Bench Press', sets: 4, reps: 8 },
+                { name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
+                { name: 'Chest Flyes', sets: 3, reps: 12 }
+            ],
+            back: [
+                { name: 'Pull-ups', sets: 3, reps: 8 },
+                { name: 'Barbell Rows', sets: 3, reps: 10 },
+                { name: 'Lat Pulldowns', sets: 3, reps: 12 }
+            ],
+            shoulders: [
+                { name: 'Overhead Press', sets: 3, reps: 10 },
+                { name: 'Lateral Raises', sets: 4, reps: 15 }
+            ],
+            biceps: [
+                { name: 'Barbell Curls', sets: 3, reps: 10 },
+                { name: 'Hammer Curls', sets: 3, reps: 12 }
+            ],
+            triceps: [
+                { name: 'Tricep Pushdowns', sets: 3, reps: 12 },
+                { name: 'Overhead Extensions', sets: 3, reps: 12 }
+            ],
+            abs: [
+                { name: 'Hanging Leg Raises', sets: 3, reps: 15 },
+                { name: 'Crunches', sets: 3, reps: 20 },
+                { name: 'Plank', sets: 3, reps: 60 }
+            ]
+        };
+
+        const encodedData = encodeURIComponent(JSON.stringify(weekPlan));
+
+        const html = `
+            <p>Here is a complete <strong>High-Performance Cyberpunk Weekly Split</strong> tailored for optimal muscle hypertrophy:</p>
+            <ul>
+                <li><strong>Push Day</strong>: Chest, Front/Lateral Shoulders & Triceps (5 Exercises)</li>
+                <li><strong>Pull Day</strong>: Lats, Rhomboids, Rear Delts & Biceps (5 Exercises)</li>
+                <li><strong>Leg Day</strong>: Quads, Hamstrings, Glutes & Calves (5 Exercises)</li>
+                <li><strong>Abs & Core</strong>: Hanging Leg Raises, Crunches & Planks</li>
+            </ul>
+            <div class="ai-apply-week-container">
+                <button class="ai-apply-week-btn" data-weekplan="${encodedData}">
+                    <i class="fas fa-bolt"></i> ⚡ Apply Full Week Routine to Gym Tracker
+                </button>
+            </div>
+        `;
+        return { html };
+    }
+
+    // 2. Pull Day / Back / Biceps Query
+    if (q.includes('pull') || q.includes('back') || q.includes('bicep')) {
+        const exercises = [
+            { split: 'pull', name: 'Barbell Rows', sets: 3, reps: 10 },
+            { split: 'pull', name: 'Lat Pulldowns', sets: 3, reps: 12 },
+            { split: 'pull', name: 'Pull-ups', sets: 3, reps: 8 },
+            { split: 'pull', name: 'Face Pulls', sets: 3, reps: 15 },
+            { split: 'biceps', name: 'Barbell Bicep Curls', sets: 3, reps: 12 }
+        ];
+
+        let cardsHtml = exercises.map(ex => `
+            <div class="ai-ex-card">
+                <div class="ai-ex-info">
+                    <h5>${ex.name}</h5>
+                    <span>${ex.sets} Sets × ${ex.reps} Reps • ${ex.split.toUpperCase()}</span>
+                </div>
+                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        `).join('');
+
+        const html = `
+            <p><strong>Pull Day Focus & Muscle Breakdown:</strong></p>
+            <p>Pull exercises target your <strong>Latissimus Dorsi (Lats)</strong>, <strong>Trapezius</strong>, <strong>Rhomboids</strong>, <strong>Rear Deltoids</strong>, and <strong>Biceps</strong>.</p>
+            <p>Here are top-tier Pull workouts you can add directly:</p>
+            <div class="ai-ex-list">${cardsHtml}</div>
+        `;
+        return { html };
+    }
+
+    // 3. Push Day / Chest / Shoulders / Triceps Query
+    if (q.includes('push') || q.includes('chest') || q.includes('shoulder') || q.includes('tricep')) {
+        const exercises = [
+            { split: 'push', name: 'Barbell Bench Press', sets: 4, reps: 8 },
+            { split: 'push', name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
+            { split: 'push', name: 'Overhead Press', sets: 3, reps: 10 },
+            { split: 'push', name: 'Lateral Raises', sets: 4, reps: 15 },
+            { split: 'triceps', name: 'Tricep Pushdowns', sets: 3, reps: 12 }
+        ];
+
+        let cardsHtml = exercises.map(ex => `
+            <div class="ai-ex-card">
+                <div class="ai-ex-info">
+                    <h5>${ex.name}</h5>
+                    <span>${ex.sets} Sets × ${ex.reps} Reps • ${ex.split.toUpperCase()}</span>
+                </div>
+                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        `).join('');
+
+        const html = `
+            <p><strong>Push Day Muscle Breakdown:</strong></p>
+            <p>Push workouts engage your <strong>Pectoralis Major & Minor (Chest)</strong>, <strong>Anterior & Lateral Deltoids (Shoulders)</strong>, and <strong>Triceps Brachii</strong>.</p>
+            <p>Top recommended Push Day exercises:</p>
+            <div class="ai-ex-list">${cardsHtml}</div>
+        `;
+        return { html };
+    }
+
+    // 4. Leg Day Query
+    if (q.includes('leg') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf')) {
+        const exercises = [
+            { split: 'legs', name: 'Barbell Squats', sets: 4, reps: 8 },
+            { split: 'legs', name: 'Leg Press', sets: 3, reps: 10 },
+            { split: 'legs', name: 'Romanian Deadlifts', sets: 3, reps: 10 },
+            { split: 'legs', name: 'Leg Extensions', sets: 3, reps: 15 },
+            { split: 'legs', name: 'Calf Raises', sets: 4, reps: 20 }
+        ];
+
+        let cardsHtml = exercises.map(ex => `
+            <div class="ai-ex-card">
+                <div class="ai-ex-info">
+                    <h5>${ex.name}</h5>
+                    <span>${ex.sets} Sets × ${ex.reps} Reps • LEGS</span>
+                </div>
+                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        `).join('');
+
+        const html = `
+            <p><strong>Leg Day Breakdown:</strong></p>
+            <p>Leg workouts develop your <strong>Quadriceps</strong>, <strong>Hamstrings</strong>, <strong>Gluteus Maximus</strong>, and <strong>Calves</strong>.</p>
+            <div class="ai-ex-list">${cardsHtml}</div>
+        `;
+        return { html };
+    }
+
+    // 5. Abs / Core Query
+    if (q.includes('ab') || q.includes('core') || q.includes('crunch') || q.includes('plank')) {
+        const exercises = [
+            { split: 'abs', name: 'Hanging Leg Raises', sets: 3, reps: 15 },
+            { split: 'abs', name: 'Crunches', sets: 3, reps: 20 },
+            { split: 'abs', name: 'Plank', sets: 3, reps: 60 },
+            { split: 'abs', name: 'Russian Twists', sets: 3, reps: 20 }
+        ];
+
+        let cardsHtml = exercises.map(ex => `
+            <div class="ai-ex-card">
+                <div class="ai-ex-info">
+                    <h5>${ex.name}</h5>
+                    <span>${ex.sets} Sets × ${ex.reps} Reps • ABS</span>
+                </div>
+                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        `).join('');
+
+        const html = `
+            <p><strong>Abs & Core Recommendations:</strong></p>
+            <p>Core training targets your <strong>Rectus Abdominis</strong>, <strong>Transverse Abdominis</strong>, and <strong>Obliques</strong>.</p>
+            <div class="ai-ex-list">${cardsHtml}</div>
+        `;
+        return { html };
+    }
+
+    // Default General AI Fitness Advice
+    const exercises = [
+        { split: 'push', name: 'Barbell Bench Press', sets: 4, reps: 8 },
+        { split: 'pull', name: 'Lat Pulldowns', sets: 3, reps: 12 },
+        { split: 'legs', name: 'Barbell Squats', sets: 4, reps: 8 }
+    ];
+
+    let cardsHtml = exercises.map(ex => `
+        <div class="ai-ex-card">
+            <div class="ai-ex-info">
+                <h5>${ex.name}</h5>
+                <span>${ex.sets} Sets × ${ex.reps} Reps • ${ex.split.toUpperCase()}</span>
+            </div>
+            <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
+                <i class="fas fa-plus"></i> Add
+            </button>
+        </div>
+    `).join('');
+
+    const html = `
+        <p>I can help you build muscle, answer exercise questions, and structure your workouts! Try asking:</p>
+        <ul>
+            <li><em>"What workouts for pull day?"</em></li>
+            <li><em>"Which muscles work on Push day?"</em></li>
+            <li><em>"Generate full week workout plan"</em></li>
+        </ul>
+        <p>Featured exercises you can add right now:</p>
+        <div class="ai-ex-list">${cardsHtml}</div>
+    `;
+    return { html };
+}
+
+function parseAiTextToHtml(text) {
+    let cleanHtml = text.replace(/\n/g, '<br>');
+    return { html: cleanHtml };
+}
+
+function addExerciseFromAi(targetSplit, name, sets, reps, btnElement) {
+    if (!appState.workouts[targetSplit]) {
+        appState.workouts[targetSplit] = [];
+    }
+
+    const newEx = {
+        id: generateId(),
+        name: name,
+        sets: parseInt(sets) || 3,
+        reps: reps || '10',
+        createdAt: appState.selectedDate
+    };
+
+    const selectedProg = appState.progress[appState.selectedDate];
+    const isCustom = Array.isArray(selectedProg.customExercises);
+
+    if (isCustom) {
+        selectedProg.customExercises.push(newEx);
+    } else {
+        appState.workouts[targetSplit].push(newEx);
+    }
+
+    saveState();
+    renderSplit(appState.activeSplit);
+
+    if (btnElement) {
+        btnElement.classList.add('added');
+        btnElement.innerHTML = `<i class="fas fa-check"></i> Added`;
+    }
+}
+
+function applyWeekPlanFromAi(weekPlanData, btnElement) {
+    for (const splitKey in weekPlanData) {
+        if (Array.isArray(weekPlanData[splitKey])) {
+            appState.workouts[splitKey] = weekPlanData[splitKey].map(ex => ({
+                id: generateId(),
+                name: ex.name,
+                sets: ex.sets || 3,
+                reps: ex.reps || 10,
+                createdAt: appState.selectedDate
+            }));
+        }
+    }
+
+    saveState();
+    renderSplitTabs();
+    renderSplit(appState.activeSplit);
+
+    if (btnElement) {
+        btnElement.innerHTML = `<i class="fas fa-check-circle"></i> Applied to Gym Tracker!`;
+        btnElement.style.background = 'var(--neon-green)';
+        btnElement.style.color = 'var(--bg-dark)';
+    }
+
+    alert('Full Week Routine applied successfully to your Gym Tracker!');
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // Fire!
