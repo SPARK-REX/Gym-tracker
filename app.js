@@ -525,8 +525,31 @@ function renderSplitTabs() {
         if (split === appState.activeSplit) btn.classList.add('active');
         btn.dataset.split = split;
         btn.textContent = split.charAt(0).toUpperCase() + split.slice(1);
+        
+        btn.addEventListener('click', () => {
+            renderSplit(split);
+        });
+
         DOM.splitSelector.appendChild(btn);
     });
+
+    scrollActiveTabIntoView();
+}
+
+function scrollActiveTabIntoView() {
+    setTimeout(() => {
+        const activeTab = DOM.splitSelector.querySelector('.split-tab.active');
+        if (activeTab && DOM.splitSelector) {
+            const container = DOM.splitSelector;
+            const containerWidth = container.offsetWidth;
+            const tabOffsetLeft = activeTab.offsetLeft;
+            const tabWidth = activeTab.offsetWidth;
+            container.scrollTo({
+                left: tabOffsetLeft - (containerWidth / 2) + (tabWidth / 2),
+                behavior: 'smooth'
+            });
+        }
+    }, 20);
 }
 
 function renderSplit(splitName) {
@@ -559,6 +582,8 @@ function renderSplit(splitName) {
             tab.classList.remove('completed');
         }
     });
+
+    scrollActiveTabIntoView();
 
     if (splitName === 'rest') {
         DOM.splitTitle.textContent = 'Rest / Sick Day';

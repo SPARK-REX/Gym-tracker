@@ -88,20 +88,74 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
+    gap: 12px;
 }
 
-.app-header h1 {
-    font-size: 2rem;
+.brand-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.brand-logo-icon {
+    font-size: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.glow-icon {
+    color: var(--neon-green);
+    filter: drop-shadow(0 0 8px var(--neon-green-dim));
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+}
+
+.version-badge {
+    align-self: flex-start;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(0, 255, 102, 0.12);
+    color: var(--neon-green);
+    border: 1px solid rgba(0, 255, 102, 0.3);
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+}
+
+.brand-title {
+    font-size: 1.4rem;
     font-weight: 800;
-    letter-spacing: -0.5px;
+    letter-spacing: 0.5px;
+    line-height: 1;
+    margin: 0;
 }
 
 .header-right {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    gap: 4px;
+}
+
+.streak-pill {
+    font-size: 0.9rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
     gap: 5px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .streak-header-small {
@@ -118,6 +172,21 @@ body {
 
 .streak-header-small i {
     font-size: 1rem;
+}
+
+.streak-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+.date-badge {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
 }
 
 .date-display {
@@ -236,24 +305,43 @@ body {
 
 
 /* --- Split Selector --- */
-.split-selector {
+.split-selector-wrapper {
     display: flex;
-    gap: 10px;
-    background: rgba(0, 0, 0, 0.3);
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    position: relative;
+}
+
+.split-selector {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.35);
     padding: 6px;
-    border-radius: 12px;
+    border-radius: 14px;
     border: 1px solid var(--panel-border);
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
 }
 
 .split-selector::-webkit-scrollbar {
-    display: none;
+    display: none; /* Chrome, Safari, Edge */
 }
 
 .split-switcher-btn {
-    background: rgba(0, 0, 0, 0.3);
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    height: 42px;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.35);
     border: 1px solid var(--panel-border);
     color: var(--text-muted);
-    width: 44px;
     border-radius: 12px;
     cursor: pointer;
     display: flex;
@@ -261,40 +349,48 @@ body {
     justify-content: center;
     flex-shrink: 0;
     transition: all 0.3s ease;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .split-switcher-btn:hover {
-    color: var(--neon-white);
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--neon-green);
+    border-color: rgba(0, 255, 102, 0.3);
+    background: rgba(0, 255, 102, 0.1);
+    box-shadow: 0 0 12px var(--neon-green-dim);
 }
 
 .split-tab {
-    flex: 1;
+    flex: 0 0 auto;
+    white-space: nowrap;
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     color: var(--text-muted);
-    padding: 10px 0;
+    padding: 8px 16px;
     font-family: var(--font-main);
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 0.9rem;
     cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.3s ease;
+    border-radius: 10px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .split-tab:hover {
     color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .split-tab.active {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.12);
     color: var(--neon-white);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 .split-tab.active.completed {
-    background: var(--neon-green-dim);
+    background: rgba(0, 255, 102, 0.12);
     color: var(--neon-green);
     border: 1px solid rgba(0, 255, 102, 0.4);
     box-shadow: 0 0 15px var(--neon-green-dim);
@@ -670,4 +766,81 @@ body.edit-mode .custom-checkbox {
 
 .modal-footer .glass-btn {
     width: 100%;
+}
+
+/* --- Mobile Responsive Optimizations --- */
+@media (max-width: 480px) {
+    .app-container {
+        padding: 16px 12px 60px 12px;
+        gap: 16px;
+    }
+
+    .glass-panel {
+        padding: 15px;
+        border-radius: 16px;
+    }
+
+    .brand-title {
+        font-size: 1.25rem;
+    }
+
+    .streak-pill {
+        padding: 3px 8px;
+        font-size: 0.8rem;
+    }
+
+    .date-badge {
+        font-size: 0.65rem;
+    }
+
+    .split-tab {
+        padding: 7px 12px;
+        font-size: 0.85rem;
+    }
+
+    .split-switcher-btn {
+        flex: 0 0 38px;
+        width: 38px;
+        min-width: 38px;
+        max-width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        font-size: 0.88rem;
+    }
+
+    .split-title {
+        font-size: 1.2rem;
+    }
+
+    .controls-container {
+        gap: 10px;
+    }
+
+    .glass-btn {
+        padding: 10px;
+        font-size: 0.88rem;
+    }
+
+    .exercise-item {
+        padding: 12px;
+    }
+
+    .exercise-details h4 {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .app-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .header-right {
+        align-items: flex-start;
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-between;
+    }
 }
