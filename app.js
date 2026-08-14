@@ -1288,6 +1288,75 @@ Whenever suggesting exercises, list each exercise clearly with sets and reps.`;
     return generateBuiltInAiResponse(query);
 }
 
+let aiConversationContext = {
+    lastQuery: '',
+    targetMuscles: [],
+    equipment: 'gym',
+    equipmentTitle: 'Gym Equipment',
+    isPushDay: false,
+    isPullDay: false,
+    shownExerciseNames: []
+};
+
+function parseEquipmentConstraint(q) {
+    // Check for negations first! (e.g. "without dumbll", "without dumbbell", "no dumbbells", "no weights")
+    const hasDumbbellNegation = (
+        q.includes('without dumble') ||
+        q.includes('without dumbell') ||
+        q.includes('without dumbbell') ||
+        q.includes('without dumbll') ||
+        q.includes('without dumbles') ||
+        q.includes('without dumbells') ||
+        q.includes('no dumble') ||
+        q.includes('no dumbell') ||
+        q.includes('no dumbbell') ||
+        q.includes('no dumbll') ||
+        q.includes('no dumbles') ||
+        q.includes('no dumbells') ||
+        q.includes("dont have dumble") ||
+        q.includes("don't have dumble") ||
+        q.includes("dont have dumbell") ||
+        q.includes("don't have dumbell") ||
+        q.includes("dont have dumbbell") ||
+        q.includes("don't have dumbbell")
+    );
+
+    const hasGeneralNoEquipment = (
+        q.includes('no equipment') ||
+        q.includes('without equipment') ||
+        q.includes('no gear') ||
+        q.includes('without gear') ||
+        q.includes('no weight') ||
+        q.includes('without weight') ||
+        q.includes('bodyweight') ||
+        q.includes('calisthenic') ||
+        q.includes('at home') ||
+        q.includes('home workout')
+    );
+
+    if (hasDumbbellNegation || hasGeneralNoEquipment) {
+        return { equipment: 'no_equipment', title: 'No Equipment (Bodyweight)' };
+    }
+
+    // Positive dumbbell check
+    const hasDumbbellPositive = (
+        q.includes('dumble') ||
+        q.includes('dumbell') ||
+        q.includes('dumbbell') ||
+        q.includes('dumbll') ||
+        q.includes('dumbles') ||
+        q.includes('dumbells') ||
+        q.includes('only dumb') ||
+        q.includes('with dumb')
+    );
+
+    if (hasDumbbellPositive) {
+        return { equipment: 'dumbbells', title: 'Dumbbells Only' };
+    }
+
+    return { equipment: 'gym', title: 'Gym Equipment' };
+}
+
 const EXERCISE_KNOWLEDGE_BASE = {
     no_equipment: {
         chest: [
@@ -1295,46 +1364,82 @@ const EXERCISE_KNOWLEDGE_BASE = {
             { name: 'Wide-Grip Push-ups', sets: 3, reps: 12, split: 'chest' },
             { name: 'Decline Push-ups (Feet Elevated)', sets: 3, reps: 10, split: 'chest' },
             { name: 'Chest Dips (Parallel / Chair)', sets: 3, reps: 12, split: 'chest' },
-            { name: 'Diamond Push-ups', sets: 3, reps: 10, split: 'chest' }
+            { name: 'Diamond Push-ups', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Incline Push-ups (Hands Elevated)', sets: 3, reps: 15, split: 'chest' },
+            { name: 'Archer Push-ups', sets: 3, reps: 8, split: 'chest' },
+            { name: 'Explosive Clap Push-ups', sets: 3, reps: 8, split: 'chest' },
+            { name: 'Pseudo Planche Push-ups', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Staggered Hands Push-ups', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Isometric Chest Press Hold', sets: 3, reps: '30s', split: 'chest' }
         ],
         biceps: [
             { name: 'Doorway Bicep Curls', sets: 3, reps: 15, split: 'biceps' },
             { name: 'Towel Resistance Bicep Curls', sets: 3, reps: 12, split: 'biceps' },
             { name: 'Underhand Inverted Rows', sets: 3, reps: 10, split: 'biceps' },
-            { name: 'Chin-ups (Underhand Grip)', sets: 3, reps: 8, split: 'biceps' }
+            { name: 'Chin-ups (Underhand Grip)', sets: 3, reps: 8, split: 'biceps' },
+            { name: 'Bodyweight Drag Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Isometric Bicep Wall Hold', sets: 3, reps: '30s', split: 'biceps' },
+            { name: 'High-Pulley Doorway Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Negative Slow Chin-ups', sets: 3, reps: 6, split: 'biceps' },
+            { name: 'Flexed Arm Hang', sets: 3, reps: '25s', split: 'biceps' }
         ],
         triceps: [
             { name: 'Diamond Push-ups', sets: 3, reps: 12, split: 'triceps' },
             { name: 'Bench / Chair Dips', sets: 3, reps: 15, split: 'triceps' },
             { name: 'Cobra Push-ups', sets: 3, reps: 12, split: 'triceps' },
-            { name: 'Bodyweight Tricep Extensions', sets: 3, reps: 10, split: 'triceps' }
+            { name: 'Bodyweight Tricep Extensions', sets: 3, reps: 10, split: 'triceps' },
+            { name: 'Close-Grip Push-ups', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Sphynx Push-ups', sets: 3, reps: 10, split: 'triceps' },
+            { name: 'Floor Tricep Press-ups', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Plank-to-Pushup Tricep Taps', sets: 3, reps: 10, split: 'triceps' }
         ],
         back: [
             { name: 'Bodyweight Inverted Rows', sets: 3, reps: 12, split: 'back' },
             { name: 'Doorway Rows', sets: 3, reps: 15, split: 'back' },
             { name: 'Superman Hold & Raises', sets: 3, reps: 15, split: 'back' },
             { name: 'Reverse Snow Angels', sets: 3, reps: 15, split: 'back' },
-            { name: 'Overhand Pull-ups', sets: 3, reps: 8, split: 'back' }
+            { name: 'Overhand Pull-ups', sets: 3, reps: 8, split: 'back' },
+            { name: 'Wide-Grip Pull-ups', sets: 3, reps: 8, split: 'back' },
+            { name: 'Australian Rows', sets: 3, reps: 12, split: 'back' },
+            { name: 'Prone Cobra Hold', sets: 3, reps: '45s', split: 'back' },
+            { name: 'Scapular Retraction Pull-ups', sets: 3, reps: 12, split: 'back' },
+            { name: 'Towel Door Rows', sets: 3, reps: 15, split: 'back' }
         ],
         shoulders: [
             { name: 'Pike Push-ups', sets: 3, reps: 10, split: 'shoulders' },
             { name: 'Elevated Feet Pike Push-ups', sets: 3, reps: 8, split: 'shoulders' },
             { name: 'Bear Crawl Shoulder Taps', sets: 3, reps: 20, split: 'shoulders' },
-            { name: 'Wall Handstand Hold', sets: 3, reps: '30s', split: 'shoulders' }
+            { name: 'Wall Handstand Hold', sets: 3, reps: '30s', split: 'shoulders' },
+            { name: 'Dolphin Push-ups', sets: 3, reps: 12, split: 'shoulders' },
+            { name: 'Prone Y-T-W Shoulder Raises', sets: 3, reps: 15, split: 'shoulders' },
+            { name: 'Crab Walk Shoulder Touches', sets: 3, reps: 20, split: 'shoulders' },
+            { name: 'Wall Walks', sets: 3, reps: 5, split: 'shoulders' }
         ],
         legs: [
             { name: 'Bodyweight Air Squats', sets: 4, reps: 20, split: 'legs' },
             { name: 'Bodyweight Walking Lunges', sets: 3, reps: 15, split: 'legs' },
             { name: 'Bulgarian Split Squats', sets: 3, reps: 12, split: 'legs' },
             { name: 'Jump Squats', sets: 3, reps: 15, split: 'legs' },
-            { name: 'Single-leg Calf Raises', sets: 4, reps: 20, split: 'legs' }
+            { name: 'Single-leg Calf Raises', sets: 4, reps: 20, split: 'legs' },
+            { name: 'Sumo Squats', sets: 3, reps: 20, split: 'legs' },
+            { name: 'Pistol Squats (Single Leg)', sets: 3, reps: 6, split: 'legs' },
+            { name: 'Reverse Lunges', sets: 3, reps: 15, split: 'legs' },
+            { name: 'Isometric Wall Sit', sets: 3, reps: '45s', split: 'legs' },
+            { name: 'Glute Bridges', sets: 3, reps: 20, split: 'legs' },
+            { name: 'Curtsy Lunges', sets: 3, reps: 12, split: 'legs' }
         ],
         abs: [
             { name: 'Bodyweight Crunches', sets: 3, reps: 20, split: 'abs' },
             { name: 'Plank Hold', sets: 3, reps: '60s', split: 'abs' },
             { name: 'Mountain Climbers', sets: 3, reps: '30s', split: 'abs' },
             { name: 'Hanging Leg / Knee Raises', sets: 3, reps: 15, split: 'abs' },
-            { name: 'Russian Twists', sets: 3, reps: 20, split: 'abs' }
+            { name: 'Russian Twists', sets: 3, reps: 20, split: 'abs' },
+            { name: 'Bicycle Crunches', sets: 3, reps: 20, split: 'abs' },
+            { name: 'Flutter Kicks', sets: 3, reps: '40s', split: 'abs' },
+            { name: 'Hollow Body Hold', sets: 3, reps: '45s', split: 'abs' },
+            { name: 'Side Plank Hold', sets: 3, reps: '45s', split: 'abs' },
+            { name: 'Dead Bug', sets: 3, reps: 15, split: 'abs' },
+            { name: 'V-Up Crunches', sets: 3, reps: 12, split: 'abs' }
         ]
     },
     dumbbells: {
@@ -1343,45 +1448,75 @@ const EXERCISE_KNOWLEDGE_BASE = {
             { name: 'Incline Dumbbell Press', sets: 3, reps: 10, split: 'chest' },
             { name: 'Dumbbell Chest Flyes', sets: 3, reps: 12, split: 'chest' },
             { name: 'Dumbbell Pullover', sets: 3, reps: 12, split: 'chest' },
-            { name: 'Dumbbell Floor Press', sets: 3, reps: 10, split: 'chest' }
+            { name: 'Dumbbell Floor Press', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Dumbbell Squeeze Press (Hex Press)', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Decline Dumbbell Bench Press', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Single-Arm Dumbbell Bench Press', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Dumbbell Around-The-World Flyes', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Standing Dumbbell Chest Flyes', sets: 3, reps: 12, split: 'chest' }
         ],
         biceps: [
             { name: 'Dumbbell Bicep Curls', sets: 3, reps: 12, split: 'biceps' },
             { name: 'Dumbbell Hammer Curls', sets: 3, reps: 12, split: 'biceps' },
             { name: 'Incline Dumbbell Curls', sets: 3, reps: 10, split: 'biceps' },
-            { name: 'Dumbbell Concentration Curls', sets: 3, reps: 10, split: 'biceps' }
+            { name: 'Dumbbell Concentration Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Dumbbell Zottman Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Cross-Body Hammer Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Dumbbell Preacher Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Seated Inner Bicep Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Dumbbell 21s Curls', sets: 3, reps: 21, split: 'biceps' }
         ],
         triceps: [
             { name: 'Overhead Dumbbell Extension', sets: 3, reps: 12, split: 'triceps' },
             { name: 'Dumbbell Kickbacks', sets: 3, reps: 15, split: 'triceps' },
             { name: 'Dumbbell Close-Grip Press', sets: 3, reps: 10, split: 'triceps' },
-            { name: 'Single-Arm Dumbbell Extension', sets: 3, reps: 12, split: 'triceps' }
+            { name: 'Single-Arm Dumbbell Extension', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Dumbbell Tate Press', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Flat Dumbbell Skullcrushers', sets: 3, reps: 10, split: 'triceps' },
+            { name: 'Weighted Dumbbell Bench Dips', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Dumbbell JM Press', sets: 3, reps: 10, split: 'triceps' }
         ],
         back: [
             { name: 'Single-Arm Dumbbell Row', sets: 3, reps: 10, split: 'back' },
             { name: 'Two-Arm Dumbbell Bent Rows', sets: 3, reps: 10, split: 'back' },
             { name: 'Dumbbell Renegade Rows', sets: 3, reps: 10, split: 'back' },
-            { name: 'Dumbbell Shrugs', sets: 3, reps: 15, split: 'back' }
+            { name: 'Dumbbell Shrugs', sets: 3, reps: 15, split: 'back' },
+            { name: 'Dumbbell Straight-Leg Deadlifts', sets: 3, reps: 10, split: 'back' },
+            { name: 'Chest-Supported Dumbbell Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Dumbbell Seal Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Heavy Dumbbell Kroc Rows', sets: 3, reps: 15, split: 'back' }
         ],
         shoulders: [
             { name: 'Dumbbell Shoulder Press', sets: 3, reps: 10, split: 'shoulders' },
             { name: 'Dumbbell Lateral Raises', sets: 4, reps: 15, split: 'shoulders' },
             { name: 'Arnold Press', sets: 3, reps: 10, split: 'shoulders' },
             { name: 'Dumbbell Front Raises', sets: 3, reps: 12, split: 'shoulders' },
-            { name: 'Dumbbell Rear Delt Flyes', sets: 3, reps: 15, split: 'shoulders' }
+            { name: 'Dumbbell Rear Delt Flyes', sets: 3, reps: 15, split: 'shoulders' },
+            { name: 'Dumbbell Upright Rows', sets: 3, reps: 12, split: 'shoulders' },
+            { name: 'Seated Dumbbell Overhead Press', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Dumbbell Bus Drivers', sets: 3, reps: 15, split: 'shoulders' },
+            { name: 'Dumbbell Y-Raises (Incline Bench)', sets: 3, reps: 12, split: 'shoulders' }
         ],
         legs: [
             { name: 'Dumbbell Goblet Squats', sets: 4, reps: 10, split: 'legs' },
             { name: 'Dumbbell Walking Lunges', sets: 3, reps: 12, split: 'legs' },
             { name: 'Dumbbell Romanian Deadlifts', sets: 3, reps: 10, split: 'legs' },
             { name: 'Dumbbell Bulgarian Split Squats', sets: 3, reps: 10, split: 'legs' },
-            { name: 'Dumbbell Calf Raises', sets: 4, reps: 20, split: 'legs' }
+            { name: 'Dumbbell Calf Raises', sets: 4, reps: 20, split: 'legs' },
+            { name: 'Dumbbell Sumo Squats', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Dumbbell Step-ups', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Dumbbell Reverse Lunges', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Single-Leg Dumbbell RDLs', sets: 3, reps: 10, split: 'legs' }
         ],
         abs: [
             { name: 'Weighted Dumbbell Crunches', sets: 3, reps: 15, split: 'abs' },
             { name: 'Dumbbell Russian Twists', sets: 3, reps: 20, split: 'abs' },
             { name: 'Dumbbell Side Bends', sets: 3, reps: 15, split: 'abs' },
-            { name: 'Dumbbell Woodchoppers', sets: 3, reps: 15, split: 'abs' }
+            { name: 'Dumbbell Woodchoppers', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Dumbbell Plank Drag', sets: 3, reps: 12, split: 'abs' },
+            { name: 'Dumbbell Overhead Sit-ups', sets: 3, reps: 12, split: 'abs' },
+            { name: 'Dumbbell Windmills', sets: 3, reps: 10, split: 'abs' },
+            { name: 'Dumbbell Turkish Get-ups', sets: 3, reps: 5, split: 'abs' }
         ]
     },
     gym: {
@@ -1390,32 +1525,49 @@ const EXERCISE_KNOWLEDGE_BASE = {
             { name: 'Incline Dumbbell Press', sets: 3, reps: 10, split: 'chest' },
             { name: 'Cable Chest Flyes', sets: 3, reps: 12, split: 'chest' },
             { name: 'Chest Dips', sets: 3, reps: 10, split: 'chest' },
-            { name: 'Pec Deck Flyes', sets: 3, reps: 12, split: 'chest' }
+            { name: 'Pec Deck Flyes', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Incline Barbell Bench Press', sets: 4, reps: 8, split: 'chest' },
+            { name: 'Low-to-High Cable Flyes', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Decline Press Machine', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Smith Machine Bench Press', sets: 3, reps: 10, split: 'chest' }
         ],
         biceps: [
             { name: 'Barbell Bicep Curls', sets: 3, reps: 10, split: 'biceps' },
             { name: 'Dumbbell Hammer Curls', sets: 3, reps: 12, split: 'biceps' },
             { name: 'EZ-Bar Preacher Curls', sets: 3, reps: 10, split: 'biceps' },
-            { name: 'Cable High Pulley Curls', sets: 3, reps: 12, split: 'biceps' }
+            { name: 'Cable High Pulley Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Behind-The-Back Cable Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Spider Machine Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Overhead Cable Bicep Curls', sets: 3, reps: 12, split: 'biceps' }
         ],
         triceps: [
             { name: 'Tricep Rope Pushdowns', sets: 3, reps: 12, split: 'triceps' },
             { name: 'Overhead Cable Extensions', sets: 3, reps: 12, split: 'triceps' },
             { name: 'EZ-Bar Skullcrushers', sets: 3, reps: 10, split: 'triceps' },
-            { name: 'Close-Grip Bench Press', sets: 3, reps: 8, split: 'triceps' }
+            { name: 'Close-Grip Bench Press', sets: 3, reps: 8, split: 'triceps' },
+            { name: 'Single-Arm Cable Tricep Pushdown', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Dip Machine', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Cable Kickbacks', sets: 3, reps: 15, split: 'triceps' }
         ],
         back: [
             { name: 'Barbell Deadlifts', sets: 3, reps: 5, split: 'back' },
             { name: 'Overhand Pull-ups', sets: 3, reps: 8, split: 'back' },
             { name: 'Barbell Bent Over Rows', sets: 3, reps: 10, split: 'back' },
             { name: 'Lat Pulldowns', sets: 3, reps: 12, split: 'back' },
-            { name: 'Seated Cable Rows', sets: 3, reps: 12, split: 'back' }
+            { name: 'Seated Cable Rows', sets: 3, reps: 12, split: 'back' },
+            { name: 'T-Bar Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Close-Grip Lat Pulldowns', sets: 3, reps: 10, split: 'back' },
+            { name: 'Single-Arm Cable Rows', sets: 3, reps: 12, split: 'back' },
+            { name: 'Rack Pulls', sets: 3, reps: 6, split: 'back' }
         ],
         shoulders: [
             { name: 'Barbell Overhead Press', sets: 3, reps: 10, split: 'shoulders' },
             { name: 'Dumbbell Lateral Raises', sets: 4, reps: 15, split: 'shoulders' },
             { name: 'Face Pulls (Cable)', sets: 3, reps: 15, split: 'shoulders' },
-            { name: 'Machine Shoulder Press', sets: 3, reps: 10, split: 'shoulders' }
+            { name: 'Machine Shoulder Press', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Cable Lateral Raises', sets: 4, reps: 15, split: 'shoulders' },
+            { name: 'Reverse Pec Deck Flyes', sets: 3, reps: 12, split: 'shoulders' },
+            { name: 'Barbell Upright Rows', sets: 3, reps: 10, split: 'shoulders' }
         ],
         legs: [
             { name: 'Barbell Back Squats', sets: 4, reps: 8, split: 'legs' },
@@ -1423,13 +1575,20 @@ const EXERCISE_KNOWLEDGE_BASE = {
             { name: 'Barbell Romanian Deadlifts', sets: 3, reps: 10, split: 'legs' },
             { name: 'Leg Extensions', sets: 3, reps: 15, split: 'legs' },
             { name: 'Lying Leg Curls', sets: 3, reps: 12, split: 'legs' },
-            { name: 'Standing Calf Raises', sets: 4, reps: 20, split: 'legs' }
+            { name: 'Standing Calf Raises', sets: 4, reps: 20, split: 'legs' },
+            { name: 'Barbell Front Squats', sets: 4, reps: 8, split: 'legs' },
+            { name: 'Hack Squat Machine', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Seated Hamstring Curls', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Hip Thrusts (Barbell)', sets: 4, reps: 10, split: 'legs' }
         ],
         abs: [
             { name: 'Hanging Leg Raises', sets: 3, reps: 15, split: 'abs' },
             { name: 'Cable Rope Crunches', sets: 3, reps: 15, split: 'abs' },
             { name: 'Ab Wheel Rollouts', sets: 3, reps: 12, split: 'abs' },
-            { name: 'Plank Hold', sets: 3, reps: '60s', split: 'abs' }
+            { name: 'Plank Hold', sets: 3, reps: '60s', split: 'abs' },
+            { name: 'Captain Chair Knee Raises', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Decline Bench Weighted Crunches', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Cable Woodchoppers', sets: 3, reps: 15, split: 'abs' }
         ]
     }
 };
@@ -1437,21 +1596,70 @@ const EXERCISE_KNOWLEDGE_BASE = {
 function generateBuiltInAiResponse(query) {
     const q = query.toLowerCase();
 
-    // 1. Detect Equipment Level
+    // Check if user is asking for "more" or "variations" of previous request
+    const isMoreRequest = (
+        q.includes('more') ||
+        q.includes('variation') ||
+        q.includes('variations') ||
+        q.includes('another') ||
+        q.includes('other exercise') ||
+        q.includes('others') ||
+        q.includes('different') ||
+        q.includes('give me more') ||
+        q.includes('show more') ||
+        q.includes('extra')
+    );
+
     let equipment = 'gym';
     let equipmentTitle = 'Gym Equipment';
-    if (q.includes('no equipment') || q.includes('without equipment') || q.includes('no gear') || q.includes('without gear') || q.includes('bodyweight') || q.includes('calisthenic') || q.includes('at home') || q.includes('home workout')) {
-        equipment = 'no_equipment';
-        equipmentTitle = 'No Equipment (Bodyweight)';
-    } else if (q.includes('dumble') || q.includes('dumbell') || q.includes('dumbbell') || q.includes('dumbles') || q.includes('dumbells') || q.includes('only dumb')) {
-        equipment = 'dumbbells';
-        equipmentTitle = 'Dumbbells Only';
+    let targetMuscles = [];
+    let isPushDay = false;
+    let isPullDay = false;
+    let isFullWeek = false;
+
+    if (isMoreRequest && aiConversationContext.lastQuery) {
+        // Reuse context from previous turn!
+        equipment = aiConversationContext.equipment;
+        equipmentTitle = aiConversationContext.equipmentTitle;
+        targetMuscles = [...aiConversationContext.targetMuscles];
+        isPushDay = aiConversationContext.isPushDay;
+        isPullDay = aiConversationContext.isPullDay;
+    } else {
+        // 1. Detect Equipment Level with Smart Negation
+        const eqParsed = parseEquipmentConstraint(q);
+        equipment = eqParsed.equipment;
+        equipmentTitle = eqParsed.title;
+
+        // 2. Check for Full Week Plan Request
+        isFullWeek = (q.includes('week') || q.includes('full plan') || q.includes('schedule') || q.includes('routine'));
+
+        // 3. Detect Targeted Muscles / Body Parts
+        if (q.includes('chest') || q.includes('pec') || q.includes('bench press')) targetMuscles.push('chest');
+        if (q.includes('bicep') || q.includes('biceps') || q.includes('arm curl') || q.includes('curls')) targetMuscles.push('biceps');
+        if (q.includes('tricep') || q.includes('triceps') || q.includes('pushdown')) targetMuscles.push('triceps');
+        if (q.includes('back') || q.includes('lat') || q.includes('pulldown') || q.includes('deadlift')) targetMuscles.push('back');
+        if (q.includes('shoulder') || q.includes('shoulders') || q.includes('delt') || q.includes('delts')) targetMuscles.push('shoulders');
+        if (q.includes('leg') || q.includes('legs') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf') || q.includes('calves') || q.includes('glute')) targetMuscles.push('legs');
+        if (q.includes('ab') || q.includes('abs') || q.includes('core') || q.includes('crunch') || q.includes('plank')) targetMuscles.push('abs');
+
+        isPushDay = q.includes('push') || q.includes('push day');
+        isPullDay = q.includes('pull') || q.includes('pull day');
+
+        // Reset shown exercise names when a brand new context is started
+        aiConversationContext = {
+            lastQuery: query,
+            targetMuscles: targetMuscles,
+            equipment: equipment,
+            equipmentTitle: equipmentTitle,
+            isPushDay: isPushDay,
+            isPullDay: isPullDay,
+            shownExerciseNames: []
+        };
     }
 
     const eqData = EXERCISE_KNOWLEDGE_BASE[equipment];
 
-    // 2. Check for Full Week Plan Request
-    if (q.includes('week') || q.includes('full plan') || q.includes('schedule') || q.includes('routine')) {
+    if (isFullWeek) {
         const weekPlan = {
             push: [
                 ...eqData.chest.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
@@ -1490,65 +1698,75 @@ function generateBuiltInAiResponse(query) {
         return { html };
     }
 
-    // 3. Detect Targeted Muscles / Body Parts
-    let targetMuscles = [];
-    if (q.includes('chest') || q.includes('pec') || q.includes('bench press')) targetMuscles.push('chest');
-    if (q.includes('bicep') || q.includes('biceps') || q.includes('arm curl') || q.includes('curls')) targetMuscles.push('biceps');
-    if (q.includes('tricep') || q.includes('triceps') || q.includes('pushdown')) targetMuscles.push('triceps');
-    if (q.includes('back') || q.includes('lat') || q.includes('pulldown') || q.includes('deadlift')) targetMuscles.push('back');
-    if (q.includes('shoulder') || q.includes('shoulders') || q.includes('delt') || q.includes('delts')) targetMuscles.push('shoulders');
-    if (q.includes('leg') || q.includes('legs') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf') || q.includes('calves') || q.includes('glute')) targetMuscles.push('legs');
-    if (q.includes('ab') || q.includes('abs') || q.includes('core') || q.includes('crunch') || q.includes('plank')) targetMuscles.push('abs');
-
-    // Handle Push or Pull specifically if user typed push day or pull day
-    const isPushDay = q.includes('push') || q.includes('push day');
-    const isPullDay = q.includes('pull') || q.includes('pull day');
-
-    let exercisesToReturn = [];
+    let candidatePool = [];
     let titleHtml = '';
 
     if (targetMuscles.length > 0) {
-        // Precise muscle targeting requested!
         targetMuscles.forEach(m => {
             if (eqData[m]) {
-                exercisesToReturn.push(...eqData[m]);
+                candidatePool.push(...eqData[m]);
             }
         });
         const muscleNames = targetMuscles.map(m => m.toUpperCase()).join(' & ');
-        titleHtml = `<p><strong>${muscleNames} Workout (${equipmentTitle}):</strong></p>
-        <p>Here are targeted <strong>${muscleNames}</strong> exercises specifically for your equipment level:</p>`;
+        if (isMoreRequest) {
+            titleHtml = `<p><strong>🔥 More ${muscleNames} Variations (${equipmentTitle}):</strong></p>
+            <p>Here are additional exercise variations for <strong>${muscleNames}</strong>:</p>`;
+        } else {
+            titleHtml = `<p><strong>${muscleNames} Workout (${equipmentTitle}):</strong></p>
+            <p>Here are targeted <strong>${muscleNames}</strong> exercises specifically for your equipment level:</p>`;
+        }
     } else if (isPushDay) {
-        // Push Day requested
-        exercisesToReturn = [
-            ...eqData.chest.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
-            ...eqData.shoulders.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
-            ...eqData.triceps.slice(0, 1).map(ex => ({ ...ex, split: 'push' }))
+        candidatePool = [
+            ...eqData.chest.map(ex => ({ ...ex, split: 'push' })),
+            ...eqData.shoulders.map(ex => ({ ...ex, split: 'push' })),
+            ...eqData.triceps.map(ex => ({ ...ex, split: 'push' }))
         ];
-        titleHtml = `<p><strong>Push Day Routine (${equipmentTitle}):</strong></p>
-        <p>Targets your <strong>Chest, Shoulders & Triceps</strong>:</p>`;
+        titleHtml = isMoreRequest 
+            ? `<p><strong>🔥 More Push Day Variations (${equipmentTitle}):</strong></p>` 
+            : `<p><strong>Push Day Routine (${equipmentTitle}):</strong></p>`;
     } else if (isPullDay) {
-        // Pull Day requested
-        exercisesToReturn = [
-            ...eqData.back.slice(0, 3).map(ex => ({ ...ex, split: 'pull' })),
-            ...eqData.biceps.slice(0, 2).map(ex => ({ ...ex, split: 'pull' }))
+        candidatePool = [
+            ...eqData.back.map(ex => ({ ...ex, split: 'pull' })),
+            ...eqData.biceps.map(ex => ({ ...ex, split: 'pull' }))
         ];
-        titleHtml = `<p><strong>Pull Day Routine (${equipmentTitle}):</strong></p>
-        <p>Targets your <strong>Back & Biceps</strong>:</p>`;
+        titleHtml = isMoreRequest 
+            ? `<p><strong>🔥 More Pull Day Variations (${equipmentTitle}):</strong></p>` 
+            : `<p><strong>Pull Day Routine (${equipmentTitle}):</strong></p>`;
     } else {
-        // Equipment only specified OR General Query
-        exercisesToReturn = [
-            eqData.chest[0],
-            eqData.biceps[0],
-            eqData.legs[0],
-            eqData.shoulders[0],
-            eqData.triceps[0]
-        ].filter(Boolean);
-
-        titleHtml = `<p><strong>Custom Workout Recommendation (${equipmentTitle}):</strong></p>
-        <p>You can ask for specific body parts (e.g. <em>"chest without equipment"</em>, <em>"biceps with dumbbells"</em>, <em>"legs"</em>)! Here are top picks:</p>`;
+        candidatePool = [
+            ...eqData.chest,
+            ...eqData.biceps,
+            ...eqData.legs,
+            ...eqData.shoulders,
+            ...eqData.triceps
+        ];
+        titleHtml = isMoreRequest
+            ? `<p><strong>🔥 More Workout Variations (${equipmentTitle}):</strong></p>`
+            : `<p><strong>Custom Workout Recommendation (${equipmentTitle}):</strong></p>`;
     }
 
-    let cardsHtml = exercisesToReturn.map(ex => `
+    // Filter out already shown exercises if isMoreRequest
+    let selectedExercises = [];
+    if (isMoreRequest && aiConversationContext.shownExerciseNames.length > 0) {
+        const unshown = candidatePool.filter(ex => !aiConversationContext.shownExerciseNames.includes(ex.name));
+        if (unshown.length > 0) {
+            selectedExercises = unshown.slice(0, 5);
+        } else {
+            // Loop back if all variations shown
+            selectedExercises = candidatePool.slice(0, 5);
+        }
+    } else {
+        selectedExercises = candidatePool.slice(0, 5);
+    }
+
+    // Record shown exercise names in context
+    selectedExercises.forEach(ex => {
+        if (!aiConversationContext.shownExerciseNames.includes(ex.name)) {
+            aiConversationContext.shownExerciseNames.push(ex.name);
+        }
+    });
+
+    let cardsHtml = selectedExercises.map(ex => `
         <div class="ai-ex-card">
             <div class="ai-ex-info">
                 <h5>${ex.name}</h5>
