@@ -894,28 +894,21 @@ function bindEvents() {
             provider.addScope('profile');
             provider.addScope('email');
 
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-            if (isMobile) {
-                auth.signInWithRedirect(provider).catch(err => {
+            // Try popup sign-in first (works on both Desktop and modern Mobile), fallback to redirect if blocked
+            auth.signInWithPopup(provider).then(result => {
+                if (result && result.user) {
+                    console.log("Google popup sign-in successful:", result.user.displayName || result.user.email);
+                }
+            }).catch(err => {
+                if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/operation-not-supported-in-this-environment') {
+                    console.warn("Popup unavailable or blocked, falling back to redirect auth...", err);
+                    auth.signInWithRedirect(provider).catch(reErr => {
+                        handleAuthError(reErr);
+                    });
+                } else {
                     handleAuthError(err);
-                });
-            } else {
-                auth.signInWithPopup(provider).then(result => {
-                    if (result && result.user) {
-                        console.log("Google popup sign-in successful:", result.user.displayName || result.user.email);
-                    }
-                }).catch(err => {
-                    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/operation-not-supported-in-this-environment') {
-                        console.warn("Popup unavailable or blocked, falling back to redirect auth...", err);
-                        auth.signInWithRedirect(provider).catch(reErr => {
-                            handleAuthError(reErr);
-                        });
-                    } else {
-                        handleAuthError(err);
-                    }
-                });
-            }
+                }
+            });
         });
     }
     if (DOM.googleLogoutBtn) {
