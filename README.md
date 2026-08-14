@@ -51,7 +51,7 @@
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/wolfbyte0/Gym-tracker.git
+   git clone https://github.com/SPARK-REX/Gym-tracker.git
    cd Gym-tracker
    ```
 
