@@ -1263,7 +1263,10 @@ async function fetchAiResponse(query) {
     const apiKey = localStorage.getItem('gymGeminiApiKey');
     if (apiKey) {
         try {
-            const prompt = `You are PULSE AI, a Cyberpunk Gym Coach. User query: "${query}". Respond concisely in HTML (use standard tags like <strong>, <p>, <ul>, <li>). Whenever you suggest specific exercises, include them in standard text format.`;
+            const prompt = `You are PULSE AI, a Cyberpunk Gym Coach. User query: "${query}". 
+Respond concisely in HTML (use standard tags like <strong>, <p>, <ul>, <li>). 
+Focus strictly on relevant workouts. Respect any equipment constraints mentioned (e.g. no equipment / bodyweight, dumbbells only, full gym) and targeted body parts (chest, biceps, triceps, back, shoulders, legs, abs, push, pull). 
+Whenever suggesting exercises, list each exercise clearly with sets and reps.`;
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1285,210 +1288,267 @@ async function fetchAiResponse(query) {
     return generateBuiltInAiResponse(query);
 }
 
+const EXERCISE_KNOWLEDGE_BASE = {
+    no_equipment: {
+        chest: [
+            { name: 'Standard Push-ups', sets: 3, reps: 15, split: 'chest' },
+            { name: 'Wide-Grip Push-ups', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Decline Push-ups (Feet Elevated)', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Chest Dips (Parallel / Chair)', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Diamond Push-ups', sets: 3, reps: 10, split: 'chest' }
+        ],
+        biceps: [
+            { name: 'Doorway Bicep Curls', sets: 3, reps: 15, split: 'biceps' },
+            { name: 'Towel Resistance Bicep Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Underhand Inverted Rows', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Chin-ups (Underhand Grip)', sets: 3, reps: 8, split: 'biceps' }
+        ],
+        triceps: [
+            { name: 'Diamond Push-ups', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Bench / Chair Dips', sets: 3, reps: 15, split: 'triceps' },
+            { name: 'Cobra Push-ups', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Bodyweight Tricep Extensions', sets: 3, reps: 10, split: 'triceps' }
+        ],
+        back: [
+            { name: 'Bodyweight Inverted Rows', sets: 3, reps: 12, split: 'back' },
+            { name: 'Doorway Rows', sets: 3, reps: 15, split: 'back' },
+            { name: 'Superman Hold & Raises', sets: 3, reps: 15, split: 'back' },
+            { name: 'Reverse Snow Angels', sets: 3, reps: 15, split: 'back' },
+            { name: 'Overhand Pull-ups', sets: 3, reps: 8, split: 'back' }
+        ],
+        shoulders: [
+            { name: 'Pike Push-ups', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Elevated Feet Pike Push-ups', sets: 3, reps: 8, split: 'shoulders' },
+            { name: 'Bear Crawl Shoulder Taps', sets: 3, reps: 20, split: 'shoulders' },
+            { name: 'Wall Handstand Hold', sets: 3, reps: '30s', split: 'shoulders' }
+        ],
+        legs: [
+            { name: 'Bodyweight Air Squats', sets: 4, reps: 20, split: 'legs' },
+            { name: 'Bodyweight Walking Lunges', sets: 3, reps: 15, split: 'legs' },
+            { name: 'Bulgarian Split Squats', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Jump Squats', sets: 3, reps: 15, split: 'legs' },
+            { name: 'Single-leg Calf Raises', sets: 4, reps: 20, split: 'legs' }
+        ],
+        abs: [
+            { name: 'Bodyweight Crunches', sets: 3, reps: 20, split: 'abs' },
+            { name: 'Plank Hold', sets: 3, reps: '60s', split: 'abs' },
+            { name: 'Mountain Climbers', sets: 3, reps: '30s', split: 'abs' },
+            { name: 'Hanging Leg / Knee Raises', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Russian Twists', sets: 3, reps: 20, split: 'abs' }
+        ]
+    },
+    dumbbells: {
+        chest: [
+            { name: 'Flat Dumbbell Bench Press', sets: 4, reps: 10, split: 'chest' },
+            { name: 'Incline Dumbbell Press', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Dumbbell Chest Flyes', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Dumbbell Pullover', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Dumbbell Floor Press', sets: 3, reps: 10, split: 'chest' }
+        ],
+        biceps: [
+            { name: 'Dumbbell Bicep Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Dumbbell Hammer Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'Incline Dumbbell Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Dumbbell Concentration Curls', sets: 3, reps: 10, split: 'biceps' }
+        ],
+        triceps: [
+            { name: 'Overhead Dumbbell Extension', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Dumbbell Kickbacks', sets: 3, reps: 15, split: 'triceps' },
+            { name: 'Dumbbell Close-Grip Press', sets: 3, reps: 10, split: 'triceps' },
+            { name: 'Single-Arm Dumbbell Extension', sets: 3, reps: 12, split: 'triceps' }
+        ],
+        back: [
+            { name: 'Single-Arm Dumbbell Row', sets: 3, reps: 10, split: 'back' },
+            { name: 'Two-Arm Dumbbell Bent Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Dumbbell Renegade Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Dumbbell Shrugs', sets: 3, reps: 15, split: 'back' }
+        ],
+        shoulders: [
+            { name: 'Dumbbell Shoulder Press', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Dumbbell Lateral Raises', sets: 4, reps: 15, split: 'shoulders' },
+            { name: 'Arnold Press', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Dumbbell Front Raises', sets: 3, reps: 12, split: 'shoulders' },
+            { name: 'Dumbbell Rear Delt Flyes', sets: 3, reps: 15, split: 'shoulders' }
+        ],
+        legs: [
+            { name: 'Dumbbell Goblet Squats', sets: 4, reps: 10, split: 'legs' },
+            { name: 'Dumbbell Walking Lunges', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Dumbbell Romanian Deadlifts', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Dumbbell Bulgarian Split Squats', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Dumbbell Calf Raises', sets: 4, reps: 20, split: 'legs' }
+        ],
+        abs: [
+            { name: 'Weighted Dumbbell Crunches', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Dumbbell Russian Twists', sets: 3, reps: 20, split: 'abs' },
+            { name: 'Dumbbell Side Bends', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Dumbbell Woodchoppers', sets: 3, reps: 15, split: 'abs' }
+        ]
+    },
+    gym: {
+        chest: [
+            { name: 'Barbell Bench Press', sets: 4, reps: 8, split: 'chest' },
+            { name: 'Incline Dumbbell Press', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Cable Chest Flyes', sets: 3, reps: 12, split: 'chest' },
+            { name: 'Chest Dips', sets: 3, reps: 10, split: 'chest' },
+            { name: 'Pec Deck Flyes', sets: 3, reps: 12, split: 'chest' }
+        ],
+        biceps: [
+            { name: 'Barbell Bicep Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Dumbbell Hammer Curls', sets: 3, reps: 12, split: 'biceps' },
+            { name: 'EZ-Bar Preacher Curls', sets: 3, reps: 10, split: 'biceps' },
+            { name: 'Cable High Pulley Curls', sets: 3, reps: 12, split: 'biceps' }
+        ],
+        triceps: [
+            { name: 'Tricep Rope Pushdowns', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'Overhead Cable Extensions', sets: 3, reps: 12, split: 'triceps' },
+            { name: 'EZ-Bar Skullcrushers', sets: 3, reps: 10, split: 'triceps' },
+            { name: 'Close-Grip Bench Press', sets: 3, reps: 8, split: 'triceps' }
+        ],
+        back: [
+            { name: 'Barbell Deadlifts', sets: 3, reps: 5, split: 'back' },
+            { name: 'Overhand Pull-ups', sets: 3, reps: 8, split: 'back' },
+            { name: 'Barbell Bent Over Rows', sets: 3, reps: 10, split: 'back' },
+            { name: 'Lat Pulldowns', sets: 3, reps: 12, split: 'back' },
+            { name: 'Seated Cable Rows', sets: 3, reps: 12, split: 'back' }
+        ],
+        shoulders: [
+            { name: 'Barbell Overhead Press', sets: 3, reps: 10, split: 'shoulders' },
+            { name: 'Dumbbell Lateral Raises', sets: 4, reps: 15, split: 'shoulders' },
+            { name: 'Face Pulls (Cable)', sets: 3, reps: 15, split: 'shoulders' },
+            { name: 'Machine Shoulder Press', sets: 3, reps: 10, split: 'shoulders' }
+        ],
+        legs: [
+            { name: 'Barbell Back Squats', sets: 4, reps: 8, split: 'legs' },
+            { name: 'Leg Press Machine', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Barbell Romanian Deadlifts', sets: 3, reps: 10, split: 'legs' },
+            { name: 'Leg Extensions', sets: 3, reps: 15, split: 'legs' },
+            { name: 'Lying Leg Curls', sets: 3, reps: 12, split: 'legs' },
+            { name: 'Standing Calf Raises', sets: 4, reps: 20, split: 'legs' }
+        ],
+        abs: [
+            { name: 'Hanging Leg Raises', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Cable Rope Crunches', sets: 3, reps: 15, split: 'abs' },
+            { name: 'Ab Wheel Rollouts', sets: 3, reps: 12, split: 'abs' },
+            { name: 'Plank Hold', sets: 3, reps: '60s', split: 'abs' }
+        ]
+    }
+};
+
 function generateBuiltInAiResponse(query) {
     const q = query.toLowerCase();
 
-    // 1. Full Week Workout Plan
+    // 1. Detect Equipment Level
+    let equipment = 'gym';
+    let equipmentTitle = 'Gym Equipment';
+    if (q.includes('no equipment') || q.includes('without equipment') || q.includes('no gear') || q.includes('without gear') || q.includes('bodyweight') || q.includes('calisthenic') || q.includes('at home') || q.includes('home workout')) {
+        equipment = 'no_equipment';
+        equipmentTitle = 'No Equipment (Bodyweight)';
+    } else if (q.includes('dumble') || q.includes('dumbell') || q.includes('dumbbell') || q.includes('dumbles') || q.includes('dumbells') || q.includes('only dumb')) {
+        equipment = 'dumbbells';
+        equipmentTitle = 'Dumbbells Only';
+    }
+
+    const eqData = EXERCISE_KNOWLEDGE_BASE[equipment];
+
+    // 2. Check for Full Week Plan Request
     if (q.includes('week') || q.includes('full plan') || q.includes('schedule') || q.includes('routine')) {
         const weekPlan = {
             push: [
-                { name: 'Barbell Bench Press', sets: 4, reps: 8 },
-                { name: 'Overhead Press', sets: 3, reps: 10 },
-                { name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
-                { name: 'Tricep Pushdowns', sets: 3, reps: 12 },
-                { name: 'Lateral Raises', sets: 4, reps: 15 }
+                ...eqData.chest.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
+                ...eqData.shoulders.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
+                ...eqData.triceps.slice(0, 1).map(ex => ({ ...ex, split: 'push' }))
             ],
             pull: [
-                { name: 'Deadlifts', sets: 3, reps: 5 },
-                { name: 'Pull-ups', sets: 3, reps: 8 },
-                { name: 'Barbell Rows', sets: 3, reps: 10 },
-                { name: 'Face Pulls', sets: 3, reps: 15 },
-                { name: 'Bicep Curls', sets: 3, reps: 12 }
+                ...eqData.back.slice(0, 3).map(ex => ({ ...ex, split: 'pull' })),
+                ...eqData.biceps.slice(0, 2).map(ex => ({ ...ex, split: 'pull' }))
             ],
-            legs: [
-                { name: 'Squats', sets: 4, reps: 8 },
-                { name: 'Leg Press', sets: 3, reps: 10 },
-                { name: 'Romanian Deadlifts', sets: 3, reps: 10 },
-                { name: 'Leg Extensions', sets: 3, reps: 15 },
-                { name: 'Calf Raises', sets: 4, reps: 20 }
-            ],
-            chest: [
-                { name: 'Barbell Bench Press', sets: 4, reps: 8 },
-                { name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
-                { name: 'Chest Flyes', sets: 3, reps: 12 }
-            ],
-            back: [
-                { name: 'Pull-ups', sets: 3, reps: 8 },
-                { name: 'Barbell Rows', sets: 3, reps: 10 },
-                { name: 'Lat Pulldowns', sets: 3, reps: 12 }
-            ],
-            shoulders: [
-                { name: 'Overhead Press', sets: 3, reps: 10 },
-                { name: 'Lateral Raises', sets: 4, reps: 15 }
-            ],
-            biceps: [
-                { name: 'Barbell Curls', sets: 3, reps: 10 },
-                { name: 'Hammer Curls', sets: 3, reps: 12 }
-            ],
-            triceps: [
-                { name: 'Tricep Pushdowns', sets: 3, reps: 12 },
-                { name: 'Overhead Extensions', sets: 3, reps: 12 }
-            ],
-            abs: [
-                { name: 'Hanging Leg Raises', sets: 3, reps: 15 },
-                { name: 'Crunches', sets: 3, reps: 20 },
-                { name: 'Plank', sets: 3, reps: 60 }
-            ]
+            legs: eqData.legs.slice(0, 5),
+            chest: eqData.chest.slice(0, 4),
+            back: eqData.back.slice(0, 4),
+            shoulders: eqData.shoulders.slice(0, 3),
+            biceps: eqData.biceps.slice(0, 3),
+            triceps: eqData.triceps.slice(0, 3),
+            abs: eqData.abs.slice(0, 3)
         };
 
         const encodedData = encodeURIComponent(JSON.stringify(weekPlan));
 
         const html = `
-            <p>Here is a complete <strong>High-Performance Cyberpunk Weekly Split</strong> tailored for optimal muscle hypertrophy:</p>
+            <p>Here is a complete <strong>Weekly Routine (${equipmentTitle})</strong> tailored for your equipment level:</p>
             <ul>
-                <li><strong>Push Day</strong>: Chest, Front/Lateral Shoulders & Triceps (5 Exercises)</li>
-                <li><strong>Pull Day</strong>: Lats, Rhomboids, Rear Delts & Biceps (5 Exercises)</li>
-                <li><strong>Leg Day</strong>: Quads, Hamstrings, Glutes & Calves (5 Exercises)</li>
-                <li><strong>Abs & Core</strong>: Hanging Leg Raises, Crunches & Planks</li>
+                <li><strong>Push / Chest & Shoulders</strong>: ${weekPlan.push.length} Exercises</li>
+                <li><strong>Pull / Back & Biceps</strong>: ${weekPlan.pull.length} Exercises</li>
+                <li><strong>Legs Workout</strong>: ${weekPlan.legs.length} Exercises</li>
+                <li><strong>Abs & Core</strong>: ${weekPlan.abs.length} Exercises</li>
             </ul>
             <div class="ai-apply-week-container">
                 <button class="ai-apply-week-btn" data-weekplan="${encodedData}">
-                    <i class="fas fa-bolt"></i> ⚡ Apply Full Week Routine to Gym Tracker
+                    <i class="fas fa-bolt"></i> ⚡ Apply ${equipmentTitle} Plan to Gym Tracker
                 </button>
             </div>
         `;
         return { html };
     }
 
-    // 2. Pull Day / Back / Biceps Query
-    if (q.includes('pull') || q.includes('back') || q.includes('bicep')) {
-        const exercises = [
-            { split: 'pull', name: 'Barbell Rows', sets: 3, reps: 10 },
-            { split: 'pull', name: 'Lat Pulldowns', sets: 3, reps: 12 },
-            { split: 'pull', name: 'Pull-ups', sets: 3, reps: 8 },
-            { split: 'pull', name: 'Face Pulls', sets: 3, reps: 15 },
-            { split: 'biceps', name: 'Barbell Bicep Curls', sets: 3, reps: 12 }
+    // 3. Detect Targeted Muscles / Body Parts
+    let targetMuscles = [];
+    if (q.includes('chest') || q.includes('pec') || q.includes('bench press')) targetMuscles.push('chest');
+    if (q.includes('bicep') || q.includes('biceps') || q.includes('arm curl') || q.includes('curls')) targetMuscles.push('biceps');
+    if (q.includes('tricep') || q.includes('triceps') || q.includes('pushdown')) targetMuscles.push('triceps');
+    if (q.includes('back') || q.includes('lat') || q.includes('pulldown') || q.includes('deadlift')) targetMuscles.push('back');
+    if (q.includes('shoulder') || q.includes('shoulders') || q.includes('delt') || q.includes('delts')) targetMuscles.push('shoulders');
+    if (q.includes('leg') || q.includes('legs') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf') || q.includes('calves') || q.includes('glute')) targetMuscles.push('legs');
+    if (q.includes('ab') || q.includes('abs') || q.includes('core') || q.includes('crunch') || q.includes('plank')) targetMuscles.push('abs');
+
+    // Handle Push or Pull specifically if user typed push day or pull day
+    const isPushDay = q.includes('push') || q.includes('push day');
+    const isPullDay = q.includes('pull') || q.includes('pull day');
+
+    let exercisesToReturn = [];
+    let titleHtml = '';
+
+    if (targetMuscles.length > 0) {
+        // Precise muscle targeting requested!
+        targetMuscles.forEach(m => {
+            if (eqData[m]) {
+                exercisesToReturn.push(...eqData[m]);
+            }
+        });
+        const muscleNames = targetMuscles.map(m => m.toUpperCase()).join(' & ');
+        titleHtml = `<p><strong>${muscleNames} Workout (${equipmentTitle}):</strong></p>
+        <p>Here are targeted <strong>${muscleNames}</strong> exercises specifically for your equipment level:</p>`;
+    } else if (isPushDay) {
+        // Push Day requested
+        exercisesToReturn = [
+            ...eqData.chest.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
+            ...eqData.shoulders.slice(0, 2).map(ex => ({ ...ex, split: 'push' })),
+            ...eqData.triceps.slice(0, 1).map(ex => ({ ...ex, split: 'push' }))
         ];
-
-        let cardsHtml = exercises.map(ex => `
-            <div class="ai-ex-card">
-                <div class="ai-ex-info">
-                    <h5>${ex.name}</h5>
-                    <span>${ex.sets} Sets × ${ex.reps} Reps • ${ex.split.toUpperCase()}</span>
-                </div>
-                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
-                    <i class="fas fa-plus"></i> Add
-                </button>
-            </div>
-        `).join('');
-
-        const html = `
-            <p><strong>Pull Day Focus & Muscle Breakdown:</strong></p>
-            <p>Pull exercises target your <strong>Latissimus Dorsi (Lats)</strong>, <strong>Trapezius</strong>, <strong>Rhomboids</strong>, <strong>Rear Deltoids</strong>, and <strong>Biceps</strong>.</p>
-            <p>Here are top-tier Pull workouts you can add directly:</p>
-            <div class="ai-ex-list">${cardsHtml}</div>
-        `;
-        return { html };
-    }
-
-    // 3. Push Day / Chest / Shoulders / Triceps Query
-    if (q.includes('push') || q.includes('chest') || q.includes('shoulder') || q.includes('tricep')) {
-        const exercises = [
-            { split: 'push', name: 'Barbell Bench Press', sets: 4, reps: 8 },
-            { split: 'push', name: 'Incline Dumbbell Press', sets: 3, reps: 10 },
-            { split: 'push', name: 'Overhead Press', sets: 3, reps: 10 },
-            { split: 'push', name: 'Lateral Raises', sets: 4, reps: 15 },
-            { split: 'triceps', name: 'Tricep Pushdowns', sets: 3, reps: 12 }
+        titleHtml = `<p><strong>Push Day Routine (${equipmentTitle}):</strong></p>
+        <p>Targets your <strong>Chest, Shoulders & Triceps</strong>:</p>`;
+    } else if (isPullDay) {
+        // Pull Day requested
+        exercisesToReturn = [
+            ...eqData.back.slice(0, 3).map(ex => ({ ...ex, split: 'pull' })),
+            ...eqData.biceps.slice(0, 2).map(ex => ({ ...ex, split: 'pull' }))
         ];
+        titleHtml = `<p><strong>Pull Day Routine (${equipmentTitle}):</strong></p>
+        <p>Targets your <strong>Back & Biceps</strong>:</p>`;
+    } else {
+        // Equipment only specified OR General Query
+        exercisesToReturn = [
+            eqData.chest[0],
+            eqData.biceps[0],
+            eqData.legs[0],
+            eqData.shoulders[0],
+            eqData.triceps[0]
+        ].filter(Boolean);
 
-        let cardsHtml = exercises.map(ex => `
-            <div class="ai-ex-card">
-                <div class="ai-ex-info">
-                    <h5>${ex.name}</h5>
-                    <span>${ex.sets} Sets × ${ex.reps} Reps • ${ex.split.toUpperCase()}</span>
-                </div>
-                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
-                    <i class="fas fa-plus"></i> Add
-                </button>
-            </div>
-        `).join('');
-
-        const html = `
-            <p><strong>Push Day Muscle Breakdown:</strong></p>
-            <p>Push workouts engage your <strong>Pectoralis Major & Minor (Chest)</strong>, <strong>Anterior & Lateral Deltoids (Shoulders)</strong>, and <strong>Triceps Brachii</strong>.</p>
-            <p>Top recommended Push Day exercises:</p>
-            <div class="ai-ex-list">${cardsHtml}</div>
-        `;
-        return { html };
+        titleHtml = `<p><strong>Custom Workout Recommendation (${equipmentTitle}):</strong></p>
+        <p>You can ask for specific body parts (e.g. <em>"chest without equipment"</em>, <em>"biceps with dumbbells"</em>, <em>"legs"</em>)! Here are top picks:</p>`;
     }
 
-    // 4. Leg Day Query
-    if (q.includes('leg') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf')) {
-        const exercises = [
-            { split: 'legs', name: 'Barbell Squats', sets: 4, reps: 8 },
-            { split: 'legs', name: 'Leg Press', sets: 3, reps: 10 },
-            { split: 'legs', name: 'Romanian Deadlifts', sets: 3, reps: 10 },
-            { split: 'legs', name: 'Leg Extensions', sets: 3, reps: 15 },
-            { split: 'legs', name: 'Calf Raises', sets: 4, reps: 20 }
-        ];
-
-        let cardsHtml = exercises.map(ex => `
-            <div class="ai-ex-card">
-                <div class="ai-ex-info">
-                    <h5>${ex.name}</h5>
-                    <span>${ex.sets} Sets × ${ex.reps} Reps • LEGS</span>
-                </div>
-                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
-                    <i class="fas fa-plus"></i> Add
-                </button>
-            </div>
-        `).join('');
-
-        const html = `
-            <p><strong>Leg Day Breakdown:</strong></p>
-            <p>Leg workouts develop your <strong>Quadriceps</strong>, <strong>Hamstrings</strong>, <strong>Gluteus Maximus</strong>, and <strong>Calves</strong>.</p>
-            <div class="ai-ex-list">${cardsHtml}</div>
-        `;
-        return { html };
-    }
-
-    // 5. Abs / Core Query
-    if (q.includes('ab') || q.includes('core') || q.includes('crunch') || q.includes('plank')) {
-        const exercises = [
-            { split: 'abs', name: 'Hanging Leg Raises', sets: 3, reps: 15 },
-            { split: 'abs', name: 'Crunches', sets: 3, reps: 20 },
-            { split: 'abs', name: 'Plank', sets: 3, reps: 60 },
-            { split: 'abs', name: 'Russian Twists', sets: 3, reps: 20 }
-        ];
-
-        let cardsHtml = exercises.map(ex => `
-            <div class="ai-ex-card">
-                <div class="ai-ex-info">
-                    <h5>${ex.name}</h5>
-                    <span>${ex.sets} Sets × ${ex.reps} Reps • ABS</span>
-                </div>
-                <button class="ai-add-ex-btn" data-split="${ex.split}" data-name="${ex.name}" data-sets="${ex.sets}" data-reps="${ex.reps}">
-                    <i class="fas fa-plus"></i> Add
-                </button>
-            </div>
-        `).join('');
-
-        const html = `
-            <p><strong>Abs & Core Recommendations:</strong></p>
-            <p>Core training targets your <strong>Rectus Abdominis</strong>, <strong>Transverse Abdominis</strong>, and <strong>Obliques</strong>.</p>
-            <div class="ai-ex-list">${cardsHtml}</div>
-        `;
-        return { html };
-    }
-
-    // Default General AI Fitness Advice
-    const exercises = [
-        { split: 'push', name: 'Barbell Bench Press', sets: 4, reps: 8 },
-        { split: 'pull', name: 'Lat Pulldowns', sets: 3, reps: 12 },
-        { split: 'legs', name: 'Barbell Squats', sets: 4, reps: 8 }
-    ];
-
-    let cardsHtml = exercises.map(ex => `
+    let cardsHtml = exercisesToReturn.map(ex => `
         <div class="ai-ex-card">
             <div class="ai-ex-info">
                 <h5>${ex.name}</h5>
@@ -1501,15 +1561,10 @@ function generateBuiltInAiResponse(query) {
     `).join('');
 
     const html = `
-        <p>I can help you build muscle, answer exercise questions, and structure your workouts! Try asking:</p>
-        <ul>
-            <li><em>"What workouts for pull day?"</em></li>
-            <li><em>"Which muscles work on Push day?"</em></li>
-            <li><em>"Generate full week workout plan"</em></li>
-        </ul>
-        <p>Featured exercises you can add right now:</p>
+        ${titleHtml}
         <div class="ai-ex-list">${cardsHtml}</div>
     `;
+
     return { html };
 }
 
