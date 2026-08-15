@@ -372,44 +372,50 @@ if (!appState.progress[todayStr]) {
 }
 appState.selectedDate = todayStr;
 
-// Seed past workout data (March 1–12, 2026) — one-time
+// Seed past workout data (12 days ending yesterday) — one-time
 if (!localStorage.getItem('seedDataAppliedV2')) {
-    const seedData = {
-        '2026-03-01': 'push',
-        '2026-03-02': 'pull',
-        '2026-03-03': 'legs',
-        '2026-03-04': 'abs',
-        '2026-03-05': 'pull',
-        '2026-03-06': 'push',
-        '2026-03-07': 'legs',
-        '2026-03-08': 'rest',
-        '2026-03-09': 'chest',
-        '2026-03-10': 'back',
-        '2026-03-11': 'shoulders',
-        '2026-03-12': 'arms' // Will map to 'biceps' due to custom logic below if 'arms' isn't explicitly defined
-    };
-    
+    // Rotation applied to the 12 days immediately before today, so the seeded
+    // streak lines up with "today" regardless of when the app is first opened.
+    // (A hardcoded historical date range would make checkAndUpdateStreak()
+    // immediately zero out the streak on first load, since lastStreakUpdate
+    // would never match today/yesterday.)
+    const splitRotation = ['push', 'pull', 'legs', 'abs', 'pull', 'push', 'legs', 'rest', 'chest', 'back', 'shoulders', 'arms'];
+
     // Fallback mapping if 'arms' isn't in default workouts
     const workoutMap = {
         'arms': 'biceps'
     };
 
-    for (const [date, originalSplit] of Object.entries(seedData)) {
+    const seedDates = [];
+    for (let i = splitRotation.length; i >= 1; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i); // most recent seeded day = yesterday
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        seedDates.push(dateStr);
+    }
+
+    let lastSeededDate = null;
+    seedDates.forEach((date, idx) => {
+        const originalSplit = splitRotation[idx];
         if (!appState.progress[date] || !appState.progress[date].splitCompleted) {
             const split = workoutMap[originalSplit] || originalSplit;
             // Get all exercise IDs for that split, or empty array for rest
             const exercises = split === 'rest' ? [] : (appState.workouts[split] || []).map(ex => ex.id);
             appState.progress[date] = { splitCompleted: split, exercises: exercises };
         }
-    }
-    appState.streak = 12;
-    appState.lastStreakUpdate = '2026-03-12';
-    
-    // Also save a custom workout for fun on one of the days
-    appState.progress['2026-03-10'].customExercises = [
-        ...appState.workouts['back'],
-        { id: generateId(), name: 'Extra Lat Pulldowns', sets: 4, reps: 15, createdAt: '2026-03-10' }
-    ];
+        lastSeededDate = date;
+    });
+    appState.streak = splitRotation.length;
+    appState.lastStreakUpdate = lastSeededDate;
+
+    // Also save a custom workout for fun on one of the days (scoped to the 'back' split only)
+    const backDayDate = seedDates[9]; // corresponds to the 'back' entry in splitRotation
+    appState.progress[backDayDate].customExercises = {
+        back: [
+            ...appState.workouts['back'],
+            { id: generateId(), name: 'Extra Lat Pulldowns', sets: 4, reps: 15, createdAt: backDayDate }
+        ]
+    };
 
     localStorage.setItem('seedDataAppliedV2', 'true');
     saveState();
@@ -728,9 +734,11 @@ function renderSplit(splitName) {
         DOM.editModeBtn.style.display = 'flex';
     }
 
-    // Custom Workout Logic
-    const isCustom = Array.isArray(selectedProg.customExercises);
-    let exercises = isCustom ? selectedProg.customExercises : (appState.workouts[splitName] || []);
+    // Custom Workout Logic — customExercises is keyed per split so that
+    // customizing (or checking/unchecking) one muscle group's day doesn't
+    // leak into other splits viewed on the same date.
+    const isCustom = !!(selectedProg.customExercises && Array.isArray(selectedProg.customExercises[splitName]));
+    let exercises = isCustom ? selectedProg.customExercises[splitName] : (appState.workouts[splitName] || []);
 
     if (!isCustom) {
         exercises = exercises.filter(ex => {
@@ -745,12 +753,22 @@ function renderSplit(splitName) {
         DOM.splitTitle.classList.add('glow-text-green');
         DOM.splitTitle.classList.remove('glow-text-white');
         DOM.customizeDayBtn.classList.add('hidden');
-        DOM.revertTemplateBtn.classList.remove('hidden');
+        // Past days are read-only: don't let a stored customExercises flag re-show
+        // the revert button that was just hidden by the isPast branch above.
+        if (isPast) {
+            DOM.revertTemplateBtn.classList.add('hidden');
+        } else {
+            DOM.revertTemplateBtn.classList.remove('hidden');
+        }
     } else {
         DOM.splitTitle.textContent = splitName.charAt(0).toUpperCase() + splitName.slice(1) + ' Exercises';
         DOM.splitTitle.classList.add('glow-text-white');
         DOM.splitTitle.classList.remove('glow-text-green');
-        DOM.customizeDayBtn.classList.remove('hidden');
+        if (isPast) {
+            DOM.customizeDayBtn.classList.add('hidden');
+        } else {
+            DOM.customizeDayBtn.classList.remove('hidden');
+        }
         DOM.revertTemplateBtn.classList.add('hidden');
     }
 
@@ -801,6 +819,11 @@ function renderSplit(splitName) {
 
         const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + ' exercise form tutorial')}`;
 
+        // Past workouts are read-only history — don't offer edit/delete on logged days
+        const editDeleteHtml = isPast ? '' : `
+                <button class="item-edit-btn" data-id="${ex.id}"><i class="fas fa-pen"></i></button>
+                <button class="item-delete-btn" data-id="${ex.id}"><i class="fas fa-trash"></i></button>`;
+
         li.innerHTML = `
             <div class="exercise-bg-animation"></div>
             <div class="exercise-info">
@@ -813,9 +836,7 @@ function renderSplit(splitName) {
             <div class="exercise-actions">
                 <a href="${youtubeSearchUrl}" target="_blank" rel="noopener noreferrer" class="item-yt-btn" title="Watch Tutorial">
                     <i class="fab fa-youtube"></i>
-                </a>
-                <button class="item-edit-btn" data-id="${ex.id}"><i class="fas fa-pen"></i></button>
-                <button class="item-delete-btn" data-id="${ex.id}"><i class="fas fa-trash"></i></button>
+                </a>${editDeleteHtml}
             </div>
         `;
         DOM.exerciseList.appendChild(li);
@@ -982,6 +1003,11 @@ function bindEvents() {
             return;
         }
 
+        // Past days are read-only history — never allow edit/delete regardless of how the click arrived
+        if (appState.selectedDate < todayStr) {
+            return;
+        }
+
         // Edit
         const editBtn = e.target.closest('.item-edit-btn');
         if (editBtn) {
@@ -995,10 +1021,10 @@ function bindEvents() {
             const id = deleteBtn.dataset.id;
             if (confirm('Delete this exercise?')) {
                 const selectedProg = appState.progress[appState.selectedDate];
-                const isCustom = Array.isArray(selectedProg.customExercises);
+                const isCustom = !!(selectedProg.customExercises && Array.isArray(selectedProg.customExercises[appState.activeSplit]));
 
                 if (isCustom) {
-                    selectedProg.customExercises = selectedProg.customExercises.filter(e => e.id !== id);
+                    selectedProg.customExercises[appState.activeSplit] = selectedProg.customExercises[appState.activeSplit].filter(e => e.id !== id);
                 } else {
                     const ex = appState.workouts[appState.activeSplit].find(e => e.id === id);
                     if (ex) {
@@ -1047,7 +1073,8 @@ function bindEvents() {
                 return true;
             });
             
-            selectedProg.customExercises = JSON.parse(JSON.stringify(currentExercises));
+            if (!selectedProg.customExercises) selectedProg.customExercises = {};
+            selectedProg.customExercises[appState.activeSplit] = JSON.parse(JSON.stringify(currentExercises));
             saveState();
             renderSplit(appState.activeSplit);
         }
@@ -1057,7 +1084,9 @@ function bindEvents() {
             if (confirm('Revert to the global template? Any custom exercises for this day will be lost.')) {
                 console.log("Reversion confirmed.");
                 const selectedProg = appState.progress[appState.selectedDate];
-                delete selectedProg.customExercises;
+                if (selectedProg.customExercises) {
+                    delete selectedProg.customExercises[appState.activeSplit];
+                }
                 saveState();
                 renderSplit(appState.activeSplit);
             } else {
@@ -1073,8 +1102,8 @@ function openModal(exerciseId = null) {
     if (exerciseId) {
         DOM.modalTitle.textContent = 'Edit Exercise';
         const selectedProg = appState.progress[appState.selectedDate];
-        const isCustom = Array.isArray(selectedProg.customExercises);
-        const targetArray = isCustom ? selectedProg.customExercises : appState.workouts[appState.activeSplit];
+        const isCustom = !!(selectedProg.customExercises && Array.isArray(selectedProg.customExercises[appState.activeSplit]));
+        const targetArray = isCustom ? selectedProg.customExercises[appState.activeSplit] : appState.workouts[appState.activeSplit];
 
         const ex = targetArray.find(e => e.id === exerciseId);
         if (ex) {
@@ -1108,8 +1137,8 @@ function saveExercise() {
     }
 
     const selectedProg = appState.progress[appState.selectedDate];
-    const isCustom = Array.isArray(selectedProg.customExercises);
-    const targetArray = isCustom ? selectedProg.customExercises : appState.workouts[appState.activeSplit];
+    const isCustom = !!(selectedProg.customExercises && Array.isArray(selectedProg.customExercises[appState.activeSplit]));
+    const targetArray = isCustom ? selectedProg.customExercises[appState.activeSplit] : appState.workouts[appState.activeSplit];
 
     if (editingId) {
         // Edit existing
@@ -1807,10 +1836,10 @@ function addExerciseFromAi(targetSplit, name, sets, reps, btnElement) {
     };
 
     const selectedProg = appState.progress[appState.selectedDate];
-    const isCustom = Array.isArray(selectedProg.customExercises);
+    const isCustom = !!(selectedProg.customExercises && Array.isArray(selectedProg.customExercises[targetSplit]));
 
     if (isCustom) {
-        selectedProg.customExercises.push(newEx);
+        selectedProg.customExercises[targetSplit].push(newEx);
     } else {
         appState.workouts[targetSplit].push(newEx);
     }
