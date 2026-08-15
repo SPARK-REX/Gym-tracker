@@ -175,6 +175,15 @@ try {
         auth = firebase.auth();
         db = firebase.database();
 
+        // Explicitly request LOCAL persistence (survives closing the browser/app
+        // and reopening later) rather than relying on the SDK's implicit default.
+        // Some installed-PWA / in-app-browser contexts silently fall back to
+        // SESSION or in-memory persistence unless this is requested explicitly,
+        // which is a common cause of being signed out every time the app reopens.
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(err => {
+            console.warn("Could not set LOCAL auth persistence, falling back to default:", err);
+        });
+
         // Process returning redirect sign-in results for mobile/fallback login
         auth.getRedirectResult().then(result => {
             if (result && result.user) {
@@ -223,9 +232,13 @@ function loadDataFromFirebase() {
     isSyncing = true;
     DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--text-muted)">Syncing...</small>`;
 
-    // Track if user already made a sync choice this session
+    // Track if the user already made a sync choice — persisted in localStorage
+    // (not sessionStorage) so it's remembered across app restarts. On an
+    // installed PWA, every reopen is a fresh "session", so sessionStorage was
+    // empty every time and re-showed this prompt daily even though the user
+    // was still actually signed in.
     const syncChoiceKey = 'gymSyncChoiceMade_' + currentUser.uid;
-    const alreadyChosen = sessionStorage.getItem(syncChoiceKey);
+    const alreadyChosen = localStorage.getItem(syncChoiceKey);
 
     const fetchPromise = db.ref('users/' + currentUser.uid + '/appState').once('value');
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout. Please check your connection.')), 10000));
@@ -245,7 +258,7 @@ function loadDataFromFirebase() {
             }
         } else {
             // No cloud data — upload local data
-            sessionStorage.setItem(syncChoiceKey, 'true');
+            localStorage.setItem(syncChoiceKey, 'true');
             isSyncing = false; // Must be false before saving
             saveDataToFirebase();
             DOM.syncStatus.innerHTML = `Connected as <b>${currentUser.displayName || currentUser.email}</b><br><small style="color:var(--neon-green)">Synced</small>`;
@@ -935,7 +948,7 @@ function bindEvents() {
     if (DOM.googleLogoutBtn) {
         DOM.googleLogoutBtn.addEventListener('click', () => {
             if (currentUser) {
-                sessionStorage.removeItem('gymSyncChoiceMade_' + currentUser.uid);
+                localStorage.removeItem('gymSyncChoiceMade_' + currentUser.uid);
             }
             if (auth) {
                 auth.signOut().then(() => {
@@ -949,7 +962,7 @@ function bindEvents() {
     if (DOM.syncKeepLocalBtn) {
         DOM.syncKeepLocalBtn.addEventListener('click', () => {
             // Upload current local data to cloud, overwriting cloud
-            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
+            if (currentUser) localStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             pendingCloudData = null;
             DOM.syncChoiceModal.classList.add('hidden');
             saveDataToFirebase();
@@ -958,7 +971,7 @@ function bindEvents() {
     }
     if (DOM.syncLoadCloudBtn) {
         DOM.syncLoadCloudBtn.addEventListener('click', () => {
-            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
+            if (currentUser) localStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             DOM.syncChoiceModal.classList.add('hidden');
             if (pendingCloudData) {
                 applyCloudData(pendingCloudData);
@@ -968,7 +981,7 @@ function bindEvents() {
     }
     if (DOM.syncMergeBtn) {
         DOM.syncMergeBtn.addEventListener('click', () => {
-            if (currentUser) sessionStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
+            if (currentUser) localStorage.setItem('gymSyncChoiceMade_' + currentUser.uid, 'true');
             DOM.syncChoiceModal.classList.add('hidden');
             if (pendingCloudData) {
                 mergeData(pendingCloudData);
