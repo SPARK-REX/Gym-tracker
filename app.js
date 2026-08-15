@@ -1327,59 +1327,46 @@ let aiConversationContext = {
     shownExerciseNames: []
 };
 
+function normalizeQuery(raw) {
+    // Lowercase, strip punctuation to spaces, collapse whitespace, and pad
+    // with leading/trailing spaces so phrase checks below are word-boundary
+    // safe (e.g. so "ab" doesn't match inside "table", "back" doesn't match
+    // inside "backpack", etc.)
+    return ' ' + raw.toLowerCase().replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+}
+
+function hasPhrase(q, phrase) {
+    return q.includes(' ' + phrase + ' ');
+}
+
 function parseEquipmentConstraint(q) {
-    // Check for negations first! (e.g. "without dumbll", "without dumbbell", "no dumbbells", "no weights")
-    const hasDumbbellNegation = (
-        q.includes('without dumble') ||
-        q.includes('without dumbell') ||
-        q.includes('without dumbbell') ||
-        q.includes('without dumbll') ||
-        q.includes('without dumbles') ||
-        q.includes('without dumbells') ||
-        q.includes('no dumble') ||
-        q.includes('no dumbell') ||
-        q.includes('no dumbbell') ||
-        q.includes('no dumbll') ||
-        q.includes('no dumbles') ||
-        q.includes('no dumbells') ||
-        q.includes("dont have dumble") ||
-        q.includes("don't have dumble") ||
-        q.includes("dont have dumbell") ||
-        q.includes("don't have dumbell") ||
-        q.includes("dont have dumbbell") ||
-        q.includes("don't have dumbbell")
-    );
+    // q is expected to be normalized via normalizeQuery() already.
+    const dumbbellWords = ['dumbbell', 'dumbbells', 'dumbell', 'dumbells', 'dumbll', 'dumble', 'dumbles'];
+    const mentionsDumbbell = dumbbellWords.some(w => q.includes(w));
 
-    const hasGeneralNoEquipment = (
-        q.includes('no equipment') ||
-        q.includes('without equipment') ||
-        q.includes('no gear') ||
-        q.includes('without gear') ||
-        q.includes('no weight') ||
-        q.includes('without weight') ||
-        q.includes('bodyweight') ||
-        q.includes('calisthenic') ||
-        q.includes('at home') ||
-        q.includes('home workout')
+    // Matches "no dumbbells", "without a dumbbell", "don't have any dumbbells",
+    // allowing up to 3 filler words in between (a/an/any/etc.)
+    const dumbbellNegationRe = new RegExp(
+        "\\b(no|without|dont have|don't have|zero)\\b(\\s+\\w+){0,3}\\s+(" + dumbbellWords.join('|') + ')\\b'
     );
+    const hasDumbbellNegation = dumbbellNegationRe.test(q);
 
-    if (hasDumbbellNegation || hasGeneralNoEquipment) {
+    // Matches "no equipment", "no other equipment", "without any gear",
+    // "don't have weights" — allowing filler words like "other"/"any"/"extra"
+    // between the negation word and the equipment noun, which the old
+    // exact-substring check ("no equipment") completely missed.
+    const noEquipmentRe = /\b(no|without|dont have|don't have|zero)\b(\s+\w+){0,3}\s+(equipment|gear|weights?|machines?)\b/;
+    const bodyweightPhrases = ['bodyweight', 'body weight', 'calisthenic', 'calisthenics', 'at home', 'home workout', 'no gym', 'cant go to the gym', "can't go to the gym"];
+    const hasGeneralNoEquipment = noEquipmentRe.test(q) || bodyweightPhrases.some(p => q.includes(p));
+
+    if (hasDumbbellNegation || (hasGeneralNoEquipment && !mentionsDumbbell)) {
         return { equipment: 'no_equipment', title: 'No Equipment (Bodyweight)' };
     }
 
-    // Positive dumbbell check
-    const hasDumbbellPositive = (
-        q.includes('dumble') ||
-        q.includes('dumbell') ||
-        q.includes('dumbbell') ||
-        q.includes('dumbll') ||
-        q.includes('dumbles') ||
-        q.includes('dumbells') ||
-        q.includes('only dumb') ||
-        q.includes('with dumb')
-    );
-
-    if (hasDumbbellPositive) {
+    // Any (non-negated) mention of dumbbells is treated as a dumbbells-only
+    // constraint — covers "only dumbbells", "just dumbbells at home", "I have
+    // dumbbells, no other equipment", "with dumbbells only", etc.
+    if (mentionsDumbbell) {
         return { equipment: 'dumbbells', title: 'Dumbbells Only' };
     }
 
@@ -1623,7 +1610,7 @@ const EXERCISE_KNOWLEDGE_BASE = {
 };
 
 function generateBuiltInAiResponse(query) {
-    const q = query.toLowerCase();
+    const q = normalizeQuery(query);
 
     // Check if user is asking for "more" or "variations" of previous request
     const isMoreRequest = (
@@ -1662,17 +1649,19 @@ function generateBuiltInAiResponse(query) {
         // 2. Check for Full Week Plan Request
         isFullWeek = (q.includes('week') || q.includes('full plan') || q.includes('schedule') || q.includes('routine'));
 
-        // 3. Detect Targeted Muscles / Body Parts
-        if (q.includes('chest') || q.includes('pec') || q.includes('bench press')) targetMuscles.push('chest');
-        if (q.includes('bicep') || q.includes('biceps') || q.includes('arm curl') || q.includes('curls')) targetMuscles.push('biceps');
-        if (q.includes('tricep') || q.includes('triceps') || q.includes('pushdown')) targetMuscles.push('triceps');
-        if (q.includes('back') || q.includes('lat') || q.includes('pulldown') || q.includes('deadlift')) targetMuscles.push('back');
-        if (q.includes('shoulder') || q.includes('shoulders') || q.includes('delt') || q.includes('delts')) targetMuscles.push('shoulders');
-        if (q.includes('leg') || q.includes('legs') || q.includes('squat') || q.includes('quad') || q.includes('hamstring') || q.includes('calf') || q.includes('calves') || q.includes('glute')) targetMuscles.push('legs');
-        if (q.includes('ab') || q.includes('abs') || q.includes('core') || q.includes('crunch') || q.includes('plank')) targetMuscles.push('abs');
+        // 3. Detect Targeted Muscles / Body Parts — word-boundary safe so short
+        // tokens like "ab"/"back"/"leg" don't false-positive inside unrelated
+        // words ("table", "backpack", "legend", "college", etc.)
+        if (hasPhrase(q, 'chest') || hasPhrase(q, 'pec') || hasPhrase(q, 'pecs') || q.includes('bench press')) targetMuscles.push('chest');
+        if (hasPhrase(q, 'bicep') || hasPhrase(q, 'biceps') || q.includes('arm curl') || hasPhrase(q, 'curl') || hasPhrase(q, 'curls')) targetMuscles.push('biceps');
+        if (hasPhrase(q, 'tricep') || hasPhrase(q, 'triceps') || hasPhrase(q, 'pushdown') || hasPhrase(q, 'pushdowns')) targetMuscles.push('triceps');
+        if (hasPhrase(q, 'back') || hasPhrase(q, 'lat') || hasPhrase(q, 'lats') || hasPhrase(q, 'pulldown') || hasPhrase(q, 'pulldowns') || hasPhrase(q, 'deadlift') || hasPhrase(q, 'deadlifts')) targetMuscles.push('back');
+        if (hasPhrase(q, 'shoulder') || hasPhrase(q, 'shoulders') || hasPhrase(q, 'delt') || hasPhrase(q, 'delts')) targetMuscles.push('shoulders');
+        if (hasPhrase(q, 'leg') || hasPhrase(q, 'legs') || hasPhrase(q, 'squat') || hasPhrase(q, 'squats') || hasPhrase(q, 'quad') || hasPhrase(q, 'quads') || hasPhrase(q, 'hamstring') || hasPhrase(q, 'hamstrings') || hasPhrase(q, 'calf') || hasPhrase(q, 'calves') || hasPhrase(q, 'glute') || hasPhrase(q, 'glutes')) targetMuscles.push('legs');
+        if (hasPhrase(q, 'ab') || hasPhrase(q, 'abs') || hasPhrase(q, 'core') || hasPhrase(q, 'crunch') || hasPhrase(q, 'crunches') || hasPhrase(q, 'plank') || hasPhrase(q, 'planks')) targetMuscles.push('abs');
 
-        isPushDay = q.includes('push') || q.includes('push day');
-        isPullDay = q.includes('pull') || q.includes('pull day');
+        isPushDay = hasPhrase(q, 'push');
+        isPullDay = hasPhrase(q, 'pull');
 
         // Reset shown exercise names when a brand new context is started
         aiConversationContext = {
